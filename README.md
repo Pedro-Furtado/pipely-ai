@@ -85,77 +85,29 @@ nano .env
 
 ## Custom Domain (Optional)
 
-To use a subdomain like `pipely.yourdomain.com`:
+Use your own domain like `pipely.yourdomain.com` with automatic SSL.
 
-### 1. DNS
+### 1. Create DNS record
 
-Go to your domain provider (Cloudflare, Hostinger, GoDaddy, etc.) and create an **A record**:
+Go to your domain provider (Cloudflare, Hostinger, GoDaddy, etc.) and add an **A record**:
 
 | Type | Name | Value |
 |------|------|-------|
 | A | pipely | `YOUR_VPS_IP` |
 
-### 2. Configure Nginx on VPS
-
-If your VPS already has Nginx running on port 80 (common on Hostinger, Contabo, etc.), set your app to a different port and create a reverse proxy:
+### 2. Run one command
 
 ```bash
-# Edit .env — use a free port
-nano .env
-# Set: APP_PORT=3002
-# Set: APP_URL=https://pipely.yourdomain.com
+curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/domain.sh | sh -s pipely.yourdomain.com 3002
 ```
 
-Create the Nginx config:
+Replace `pipely.yourdomain.com` with your domain and `3002` with your app port.
 
-```bash
-sudo nano /etc/nginx/sites-available/pipely
-```
-
-Paste:
-
-```nginx
-server {
-    listen 80;
-    server_name pipely.yourdomain.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:3002;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-}
-```
-
-Enable and restart:
-
-```bash
-sudo ln -s /etc/nginx/sites-available/pipely /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-### 3. SSL with Let's Encrypt (Recommended)
-
-```bash
-sudo apt install certbot python3-certbot-nginx -y
-sudo certbot --nginx -d pipely.yourdomain.com
-```
-
-Certbot auto-configures HTTPS and renews the certificate automatically.
-
-After SSL, update your `.env`:
-
-```bash
-# Change APP_URL to https
-sed -i 's|APP_URL=http://|APP_URL=https://|' .env
-docker compose -f docker-compose.prod.yml restart app
-```
+This will:
+- Configure Nginx reverse proxy
+- Install and configure SSL (Let's Encrypt)
+- Update your `.env` with the HTTPS URL
+- Restart the app
 
 Your app is now live at `https://pipely.yourdomain.com`.
 
