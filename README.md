@@ -1,32 +1,294 @@
-# React + TypeScript + Vite
+<p align="center">
+  <img src="https://img.shields.io/badge/Pipely_AI-Task_Automation-8b5cf6?style=for-the-badge" alt="Pipely AI" />
+</p>
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+<h1 align="center">Pipely AI</h1>
 
-Currently, two official plugins are available:
+<p align="center">
+  Open-source task management platform with pipeline automation via WhatsApp and AI agent.
+  <br />
+  Self-hosted. One command to deploy. Zero external dependencies.
+</p>
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+<p align="center">
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License" />
+  <img src="https://img.shields.io/badge/docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/react-19-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React" />
+  <img src="https://img.shields.io/badge/node.js-22-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
+</p>
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## What is Pipely AI?
 
-## Expanding the Oxlint configuration
+Pipely AI automates task management through visual pipelines connected to WhatsApp. An AI agent processes tasks, sends messages, waits for responses, and moves tasks through your pipeline — all automatically.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+**Key features:**
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+- Visual drag-and-drop pipeline builder
+- AI agent with OpenAI (GPT-4o-mini) + function calling
+- WhatsApp automation via Evolution Go
+- Conditional routing based on member responses
+- Retry scheduling for unanswered tasks
+- Multi-member team management with invite links
+- Dashboard with charts and KPIs
+- Fully self-hosted — your data stays on your server
+
+---
+
+## Quick Deploy (Production)
+
+One command. Works on any VPS with Ubuntu/Debian.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.sh | sh
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+This will:
+1. Install Docker (if not installed)
+2. Generate unique credentials (DB password, JWT secret)
+3. Start PostgreSQL + App containers
+4. Show your setup URL and key
+
+After install, open `http://YOUR_IP/setup` and create your owner account.
+
+### Manual Deploy
+
+```bash
+mkdir pipely-ai && cd pipely-ai
+
+# Download files
+curl -O https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/docker-compose.prod.yml
+curl -O https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/setup.sh
+chmod +x setup.sh
+
+# Generate credentials
+./setup.sh
+
+# Start
+docker compose -f docker-compose.prod.yml up -d
+
+# View logs (setup key appears here)
+docker compose -f docker-compose.prod.yml logs app
+```
+
+### Custom Port
+
+If port 80 is in use, edit `.env` before starting:
+
+```bash
+nano .env
+# Change APP_PORT=80 to APP_PORT=3002 (or any free port)
+```
+
+---
+
+## First-Time Setup
+
+1. **Open** `http://YOUR_IP:PORT/setup`
+2. **Enter the setup key** (shown in container logs)
+3. **Create your owner account** (name, email, password)
+4. **Login** and start using
+
+### Setup Key
+
+The setup key is auto-generated on first start and shown in the logs:
+
+```
+═══════════════════════════════════════════════════════════
+  PIPELY AI — SETUP KEY (auto-generated)
+
+  2e5b1c1e-e898-4e01-bc7e-7ae3f5ef1699
+
+  Use this key at /setup to create your owner account.
+═══════════════════════════════════════════════════════════
+```
+
+View it anytime:
+
+```bash
+docker compose -f docker-compose.prod.yml logs app | grep "SETUP KEY" -A2
+```
+
+---
+
+## Adding Team Members
+
+1. Go to **Time** (Team) page
+2. Click **Convidar** (Invite)
+3. Click **Gerar link** (Generate link)
+4. Copy the link and send it to your team member (WhatsApp, email, etc.)
+5. Member opens the link, creates an account, and automatically joins your team
+
+No email server required. Links expire after the configured time.
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    Docker Container                  │
+│                                                      │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐          │
+│  │  Nginx   │  │  Server  │  │  Agent   │          │
+│  │  :80     │──│  :3333   │  │  :3335   │          │
+│  │ (proxy)  │  │ (API)    │  │ (cron)   │          │
+│  └──────────┘  └──────────┘  └──────────┘          │
+│                      │              │                │
+│                      └──────┬───────┘                │
+│                             │                        │
+│                    ┌────────┴────────┐               │
+│                    │   PostgreSQL    │               │
+│                    │     :5432       │               │
+│                    └─────────────────┘               │
+└─────────────────────────────────────────────────────┘
+```
+
+| Component | Description |
+|-----------|-------------|
+| **Nginx** | Serves frontend + proxies API requests |
+| **Server** | Express 5 REST API with JWT auth |
+| **Agent** | AI automation — polls every 60s, processes WhatsApp webhooks |
+| **PostgreSQL** | Database (auto-provisioned) |
+
+---
+
+## Pipeline Flow
+
+```
+Create Pipeline → Define Phases & Blocks → Configure Prompts/Timers/Branches
+                                                      ↓
+Agent (cron 60s) → Scans dynamic blocks → LLM generates message → Sends WhatsApp
+                                                      ↓
+WhatsApp reply → Webhook → Agent analyzes → Moves task / Retries / Notifies
+```
+
+### Block Configuration
+
+Each dynamic block can have:
+
+| Feature | Description |
+|---------|-------------|
+| **Prompt** | Instructions for the AI agent |
+| **Message delay** | Wait before sending message |
+| **Auto-advance** | Move task after X time |
+| **No-reply** | Move task if no response after X time |
+| **Conditional routing** | Branch based on member's response |
+| **Retry** | Re-ask after X time if condition matches |
+| **Auto-status** | Change task status on block entry |
+| **Notification** | Notify member when task enters block |
+
+---
+
+## Environment Variables
+
+All variables are auto-generated by `setup.sh`. You can view/edit them in `.env`:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DB_USER` | PostgreSQL username | `pipely` |
+| `DB_PASSWORD` | PostgreSQL password | *auto-generated* |
+| `DB_NAME` | Database name | `pipely_ai` |
+| `JWT_SECRET` | JWT signing secret | *auto-generated* |
+| `APP_URL` | Your domain or IP | *detected* |
+| `APP_PORT` | Port to expose | `80` |
+| `POLL_INTERVAL_MS` | Agent poll interval | `60000` |
+
+---
+
+## Integrations
+
+### WhatsApp (Evolution Go)
+
+1. Go to **WhatsApp** page
+2. Enter your Evolution Go server URL and API key
+3. Create and connect an instance
+4. Scan QR code
+
+### AI (OpenAI)
+
+1. Go to **Assistente de IA** page
+2. Enter your OpenAI API key
+3. The agent uses GPT-4o-mini for message generation and response analysis
+
+---
+
+## Commands
+
+```bash
+# View logs
+docker compose -f docker-compose.prod.yml logs app
+
+# View logs (follow)
+docker compose -f docker-compose.prod.yml logs -f app
+
+# Stop
+docker compose -f docker-compose.prod.yml down
+
+# Start
+docker compose -f docker-compose.prod.yml up -d
+
+# Restart
+docker compose -f docker-compose.prod.yml restart app
+
+# Update to latest version
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+
+# View credentials
+cat .env
+```
+
+---
+
+## Local Development
+
+```bash
+# 1. PostgreSQL
+docker run --name postgres-pipely \
+  -e POSTGRES_USER=pipely \
+  -e POSTGRES_PASSWORD=pipely123 \
+  -e POSTGRES_DB=pipely_ai \
+  -p 5433:5432 -d postgres:17
+
+# 2. Install dependencies
+npm install
+cd server && npm install && cd ..
+cd agent && npm install && cd ..
+
+# 3. Configure environment
+cp .env.example .env
+cp server/.env.example server/.env
+cp agent/.env.example agent/.env
+
+# 4. Database setup
+cd server && npm run db:push && npm run db:generate && cd ..
+
+# 5. Run
+npm run dev:all          # Frontend + Backend
+cd agent && npm run dev  # Agent (separate terminal)
+```
+
+| Service | Port |
+|---------|------|
+| Frontend | http://localhost:5173 |
+| Backend | http://localhost:3333 |
+| Agent | http://localhost:3335 |
+
+---
+
+## Tech Stack
+
+| Layer | Technologies |
+|-------|-------------|
+| **Frontend** | React 19, TypeScript, Vite 8, Tailwind CSS v4, Radix UI, Recharts |
+| **Backend** | Node.js, Express 5, Prisma 7, PostgreSQL |
+| **Agent** | OpenAI API (GPT-4o-mini), Function Calling, Evolution Go |
+| **Infra** | Docker, Nginx |
+
+---
+
+## License
+
+MIT — use it however you want.
