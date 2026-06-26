@@ -88,8 +88,12 @@ export default function Time() {
       const res = await teamService.generateInviteLink(Number(expiresHours) || 48)
       if (res.success && res.data) {
         const link = `${window.location.origin}/register?invite=${res.data.token}`
-        await navigator.clipboard.writeText(link)
-        toast.success('Link gerado e copiado!')
+        try {
+          await navigator.clipboard.writeText(link)
+          toast.success('Link gerado e copiado!')
+        } catch {
+          toast.success('Link gerado!')
+        }
         loadLinks()
       }
     } catch (err: unknown) {
@@ -102,9 +106,13 @@ export default function Time() {
 
   async function handleCopy(token: string) {
     const link = `${window.location.origin}/register?invite=${token}`
-    await navigator.clipboard.writeText(link)
+    try {
+      await navigator.clipboard.writeText(link)
+      toast.success('Link copiado!')
+    } catch {
+      toast.success('Link gerado!')
+    }
     setCopiedToken(token)
-    toast.success('Link copiado!')
     setTimeout(() => setCopiedToken(null), 2000)
   }
 
