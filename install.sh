@@ -21,7 +21,7 @@ fi
 if [ -d "$DIR" ]; then
   echo "  Directory '$DIR' already exists."
   printf "  Reinstall? (y/N): "
-  read -r CONFIRM
+  read -r CONFIRM < /dev/tty
   if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
     echo "  Cancelled."
     exit 0

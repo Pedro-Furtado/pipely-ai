@@ -14,7 +14,7 @@ if [ -f "$ENV_FILE" ]; then
   echo "  .env already exists."
   echo ""
   printf "  Overwrite? (y/N): "
-  read -r CONFIRM
+  read -r CONFIRM < /dev/tty
   if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
     echo ""
     echo "  Cancelled. To view current config: cat .env"
@@ -30,28 +30,28 @@ JWT_SECRET=$(head -c 48 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 64)
 
 # ─── Detect public IP ────────────────────────────────────────────────────────
 echo "  Detecting public IP..."
-PUBLIC_IP=$(curl -s --max-time 5 ifconfig.me 2>/dev/null || echo "")
+PUBLIC_IP=$(curl -s4 --max-time 5 ifconfig.me 2>/dev/null || echo "")
 
 if [ -z "$PUBLIC_IP" ]; then
   echo "  Could not detect IP automatically."
   printf "  Enter your VPS IP or domain: "
-  read -r PUBLIC_IP
+  read -r PUBLIC_IP < /dev/tty
   if [ -z "$PUBLIC_IP" ]; then
     PUBLIC_IP="localhost"
   fi
 else
   echo "  Detected: $PUBLIC_IP"
   printf "  Use this IP? (Y/n): "
-  read -r USE_IP
+  read -r USE_IP < /dev/tty
   if [ "$USE_IP" = "n" ] || [ "$USE_IP" = "N" ]; then
     printf "  Enter your VPS IP or domain: "
-    read -r PUBLIC_IP
+    read -r PUBLIC_IP < /dev/tty
   fi
 fi
 
 # ─── Ask port ────────────────────────────────────────────────────────────────
 printf "  Port (default 80): "
-read -r APP_PORT
+read -r APP_PORT < /dev/tty
 if [ -z "$APP_PORT" ]; then
   APP_PORT="80"
 fi
