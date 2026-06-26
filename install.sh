@@ -71,7 +71,7 @@ echo "  Waiting for services..."
 sleep 10
 
 # ─── Show setup key ─────────────────────────────────────────────────────────
-SETUP_KEY=$(docker compose logs app 2>&1 | grep -A2 "SETUP KEY" | tail -1 | tr -d ' ')
+SETUP_KEY=$(docker compose logs app 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -A2 "SETUP KEY" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
 
 echo ""
 echo "  ══════════════════════════════════════════"
