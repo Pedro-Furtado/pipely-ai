@@ -20,6 +20,9 @@ dist-ssr
 # Prisma generated
 server/generated
 
+# Claude docs (local only)
+CLAUDE.md
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
