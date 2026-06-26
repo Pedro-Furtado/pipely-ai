@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+*.md
+.env
+server/node_modules
+server/dist
+server/generated
+agent/node_modules
+agent/dist

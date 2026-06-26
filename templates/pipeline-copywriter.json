@@ -1,0 +1,287 @@
+{
+  "version": 1,
+  "name": "Copywriter",
+  "description": "Pipeline completo para gestao de tarefas de copywriting com automacoes via WhatsApp",
+  "phases": [
+    {
+      "name": "Briefing",
+      "color": "blue",
+      "position": 0,
+      "blocks": [
+        {
+          "name": "Novo Pedido",
+          "slug": "novo_pedido",
+          "blockType": "message",
+          "config": {
+            "prompt": "Notifique o responsavel sobre a nova tarefa com os detalhes e confirme se ele entendeu o briefing",
+            "branches": [
+              {
+                "label": "Briefing entendido",
+                "nextSlug": "__briefing_recebido__",
+                "condition": "Responsavel confirmou que entendeu a tarefa"
+              }
+            ],
+            "no_reply_minutes": 60,
+            "no_reply_block_id": "__sem_resposta_briefing__"
+          },
+          "position": 0,
+          "isLocked": false
+        },
+        {
+          "name": "Briefing Recebido",
+          "slug": "briefing_recebido",
+          "blockType": "message",
+          "config": {
+            "delay_minutes": 5,
+            "next_block_id": "__aguardando_inicio__"
+          },
+          "position": 1,
+          "isLocked": false
+        },
+        {
+          "name": "Sem Resposta - Briefing",
+          "slug": "sem_resposta_briefing",
+          "blockType": "message",
+          "config": {
+            "prompt": "O responsavel nao respondeu ao briefing. Reenvie a tarefa de forma resumida e peca confirmacao",
+            "branches": [
+              {
+                "label": "Respondeu agora",
+                "nextSlug": "__briefing_recebido__",
+                "condition": "Responsavel confirmou que entendeu"
+              }
+            ],
+            "no_reply_minutes": 120,
+            "no_reply_block_id": "__escalado__"
+          },
+          "position": 2,
+          "isLocked": false
+        },
+        {
+          "name": "Escalado",
+          "slug": "escalado",
+          "blockType": "stage",
+          "config": {},
+          "position": 3,
+          "isLocked": false
+        }
+      ]
+    },
+    {
+      "name": "Producao",
+      "color": "purple",
+      "position": 1,
+      "blocks": [
+        {
+          "name": "Aguardando Inicio",
+          "slug": "aguardando_inicio",
+          "blockType": "message",
+          "config": {
+            "prompt": "Pergunte se ja comecou a trabalhar na tarefa",
+            "msg_delay_minutes": 5,
+            "branches": [
+              {
+                "label": "Ja comecou",
+                "nextSlug": "__em_producao__",
+                "condition": "Responsavel ja iniciou ou esta trabalhando na tarefa"
+              },
+              {
+                "label": "Ainda nao",
+                "nextSlug": "__aguardando_inicio__",
+                "condition": "Responsavel ainda nao comecou"
+              }
+            ]
+          },
+          "position": 0,
+          "isLocked": false
+        },
+        {
+          "name": "Em Producao",
+          "slug": "em_producao",
+          "blockType": "message",
+          "config": {
+            "prompt": "Pergunte qual o prazo de entrega estimado",
+            "branches": [
+              {
+                "label": "Prazo definido",
+                "nextSlug": "__aguardando_entrega__",
+                "condition": "Responsavel informou um prazo ou data de entrega"
+              }
+            ]
+          },
+          "position": 1,
+          "isLocked": false
+        },
+        {
+          "name": "Aguardando Entrega",
+          "slug": "aguardando_entrega",
+          "blockType": "message",
+          "config": {
+            "prompt": "Pergunte se a tarefa ja foi concluida ou se precisa de mais tempo",
+            "msg_delay_minutes": 1440,
+            "branches": [
+              {
+                "label": "Entregue",
+                "nextSlug": "__em_revisao__",
+                "condition": "Responsavel informou que terminou ou entregou"
+              },
+              {
+                "label": "Precisa de mais tempo",
+                "nextSlug": "__aguardando_entrega__",
+                "condition": "Responsavel pediu mais tempo ou disse que ainda nao terminou"
+              }
+            ]
+          },
+          "position": 2,
+          "isLocked": false
+        }
+      ]
+    },
+    {
+      "name": "Revisao",
+      "color": "amber",
+      "position": 2,
+      "blocks": [
+        {
+          "name": "Em Revisao",
+          "slug": "em_revisao",
+          "blockType": "message",
+          "config": {
+            "prompt": "Avise que a entrega esta em revisao e que em breve tera um retorno"
+          },
+          "position": 0,
+          "isLocked": false
+        },
+        {
+          "name": "Revisao Solicitada",
+          "slug": "revisao_solicitada",
+          "blockType": "message",
+          "config": {
+            "prompt": "Informe que a revisao foi solicitada com os pontos de ajuste e peca para corrigir",
+            "branches": [
+              {
+                "label": "Vai corrigir",
+                "nextSlug": "__corrigindo__",
+                "condition": "Responsavel confirmou que vai corrigir"
+              }
+            ]
+          },
+          "position": 1,
+          "isLocked": false
+        },
+        {
+          "name": "Corrigindo",
+          "slug": "corrigindo",
+          "blockType": "message",
+          "config": {
+            "prompt": "Pergunte se ja finalizou as correcoes",
+            "msg_delay_minutes": 480,
+            "branches": [
+              {
+                "label": "Correcoes feitas",
+                "nextSlug": "__em_revisao__",
+                "condition": "Responsavel informou que corrigiu"
+              }
+            ]
+          },
+          "position": 2,
+          "isLocked": false
+        }
+      ]
+    },
+    {
+      "name": "Aprovacao",
+      "color": "cyan",
+      "position": 3,
+      "blocks": [
+        {
+          "name": "Aguardando Aprovacao",
+          "slug": "aguardando_aprovacao",
+          "blockType": "stage",
+          "config": {},
+          "position": 0,
+          "isLocked": false
+        },
+        {
+          "name": "Aprovado",
+          "slug": "aprovado",
+          "blockType": "message",
+          "config": {
+            "prompt": "Parabens! Avise que a tarefa foi aprovada"
+          },
+          "position": 1,
+          "isLocked": false
+        },
+        {
+          "name": "Reprovado",
+          "slug": "reprovado",
+          "blockType": "message",
+          "config": {
+            "prompt": "Informe que a tarefa foi reprovada e precisa refazer",
+            "branches": [
+              {
+                "label": "Vai refazer",
+                "nextSlug": "__em_producao__",
+                "condition": "Responsavel confirmou que vai refazer"
+              }
+            ]
+          },
+          "position": 2,
+          "isLocked": false
+        }
+      ]
+    },
+    {
+      "name": "Entrega",
+      "color": "green",
+      "position": 4,
+      "blocks": [
+        {
+          "name": "Publicado",
+          "slug": "publicado",
+          "blockType": "message",
+          "config": {
+            "prompt": "Avise que o conteudo foi publicado e agradeca pelo trabalho"
+          },
+          "position": 0,
+          "isLocked": false
+        },
+        {
+          "name": "Entregue",
+          "slug": "entregue",
+          "blockType": "stage",
+          "config": {},
+          "position": 1,
+          "isLocked": false
+        }
+      ]
+    },
+    {
+      "name": "Arquivo",
+      "color": "teal",
+      "position": 5,
+      "blocks": [
+        {
+          "name": "Cancelado",
+          "slug": "cancelado",
+          "blockType": "message",
+          "config": {
+            "prompt": "Informe que a tarefa foi cancelada"
+          },
+          "position": 0,
+          "isLocked": false
+        },
+        {
+          "name": "Pausado",
+          "slug": "pausado",
+          "blockType": "message",
+          "config": {
+            "prompt": "Informe que a tarefa foi pausada temporariamente"
+          },
+          "position": 1,
+          "isLocked": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── AUTH ────────────────────────────────────────────────────────────────────
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  password      String
+  name          String
+  phone         String?
+  remoteJid     String?
+  isOwner       Boolean  @default(false)
+  emailVerified Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  refreshTokens           RefreshToken[]
+  passwordResetTokens     PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+
+  ownedTeams    TeamMember[] @relation("TeamOwner")
+  memberships   TeamMember[] @relation("TeamUser")
+  pipelines     Pipeline[]
+  whatsapp      WhatsAppConfig?
+  aiConfig      AiConfig?
+  notifications Notification[]
+  tasksCreated  Task[] @relation("TaskCreator")
+  tasksAssigned Task[] @relation("TaskAssignee")
+  inviteTokens  InviteToken[]
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// ─── INVITE TOKENS ──────────────────────────────────────────────────────────
+
+model InviteToken {
+  id        String    @id @default(uuid())
+  token     String    @unique
+  ownerId   String
+  owner     User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  usedBy    String?
+  createdAt DateTime  @default(now())
+}
+
+// ─── AI CONFIG ───────────────────────────────────────────────────────────────
+
+model AiConfig {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  openaiApiKey String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ─── WHATSAPP (EVOLUTION GO) ──────────────────────────────────────────────────
+
+model WhatsAppConfig {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serverUrl    String
+  globalApiKey String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ─── NOTIFICAÇÕES ────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  message   String
+  data      Json     @default("{}")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// ─── TIME (TEAM) ─────────────────────────────────────────────────────────────
+
+model TeamMember {
+  id        String   @id @default(uuid())
+  ownerId   String
+  owner     User     @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("TeamUser", fields: [userId], references: [id], onDelete: Cascade)
+  role      String   @default("member")
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([ownerId, userId])
+}
+
+// ─── TAREFAS ─────────────────────────────────────────────────────────────────
+
+model Task {
+  id          String         @id @default(uuid())
+  creatorId   String
+  creator     User           @relation("TaskCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  assigneeId  String?
+  assignee    User?          @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  blockId     String?
+  block       PipelineBlock? @relation(fields: [blockId], references: [id], onDelete: SetNull)
+  title       String
+  description String?
+  priority    String         @default("medium")
+  status      String         @default("todo")
+  enteredAt   DateTime       @default(now())
+  processedAt DateTime?
+  retryAt     DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  logs TaskLog[]
+}
+
+model TaskLog {
+  id        String         @id @default(uuid())
+  taskId    String
+  task      Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  blockId   String?
+  block     PipelineBlock? @relation(fields: [blockId], references: [id], onDelete: SetNull)
+  enteredAt DateTime       @default(now())
+  leftAt    DateTime?
+}
+
+// ─── PIPELINE ────────────────────────────────────────────────────────────────
+
+model Pipeline {
+  id        String   @id @default(uuid())
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  phases PipelinePhase[]
+}
+
+model PipelinePhase {
+  id         String   @id @default(uuid())
+  pipelineId String
+  pipeline   Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  name       String
+  color      String   @default("blue")
+  position   Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  blocks PipelineBlock[]
+}
+
+model PipelineBlock {
+  id        String        @id @default(uuid())
+  phaseId   String
+  phase     PipelinePhase @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  name      String
+  slug      String
+  blockType String        @default("stage")
+  config    Json          @default("{}")
+  position  Int
+  isLocked  Boolean       @default(false)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  tasks       Task[]
+  taskLogs    TaskLog[]
+  automations PipelineAutomation[]
+
+  @@unique([phaseId, slug])
+}
+
+// ─── AUTOMAÇÕES ──────────────────────────────────────────────────────────────
+
+model PipelineAutomation {
+  id           String        @id @default(uuid())
+  blockId      String
+  block        PipelineBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  type         String
+  config       Json          @default("{}")
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
