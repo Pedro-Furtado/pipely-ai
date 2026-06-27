@@ -429,8 +429,126 @@ function Copy-EnvIfNeeded($src, $dest, $label) {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# UNINSTALL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+function Invoke-Uninstall {
+    Write-Header "Uninstall"
+
+    Write-Host "  This will permanently remove Pipely AI:" -ForegroundColor Red
+    Write-Host ""
+
+    $hasLocalDir = $false
+    $hasProdDir = $false
+    $hasContainer = $false
+    $hasProdContainers = $false
+    $localPath = ""
+
+    # Detect local dev install
+    if ((Test-Path "$DIR/package.json") -and (Select-String -Path "$DIR/package.json" -Pattern "pipely" -Quiet)) {
+        $hasLocalDir = $true
+        $localPath = (Resolve-Path $DIR).Path
+        Write-Warn "Directory: $localPath"
+    } elseif ((Test-Path "package.json") -and (Select-String -Path "package.json" -Pattern "pipely" -Quiet)) {
+        $hasLocalDir = $true
+        $localPath = (Get-Location).Path
+        Write-Warn "Directory: $localPath"
+    }
+
+    # Detect production install
+    if ((Test-Path "$DIR/docker-compose.yml") -and -not (Test-Path "$DIR/package.json")) {
+        $hasProdDir = $true
+        Write-Warn "Production directory: $(Resolve-Path $DIR)"
+    }
+
+    # Detect Docker containers
+    if (Test-Command "docker") {
+        $container = docker ps -aq -f "name=postgres-pipely" 2>$null
+        if ($container) {
+            $hasContainer = $true
+            Write-Warn "Docker container: postgres-pipely"
+        }
+
+        if ($hasProdDir -or ((Test-Path "docker-compose.yml") -and (docker compose ps -q 2>$null))) {
+            $hasProdContainers = $true
+            Write-Warn "Production containers (app + db)"
+        }
+    }
+
+    if (-not $hasLocalDir -and -not $hasProdDir -and -not $hasContainer -and -not $hasProdContainers) {
+        Write-Info "Nothing to uninstall."
+        return
+    }
+
+    Write-Host ""
+    $confirm = Read-Host "  Are you sure? This cannot be undone. (y/N)"
+    if ($confirm -notin "y", "Y") {
+        Write-Info "Cancelled."
+        return
+    }
+    Write-Host ""
+
+    # Stop and remove production containers
+    if ($hasProdContainers) {
+        if ($hasProdDir) {
+            Write-Info "Stopping production containers..."
+            Push-Location $DIR
+            $ErrorActionPreference = "Continue"
+            docker compose down -v 2>$null
+            $ErrorActionPreference = "Stop"
+            Pop-Location
+            Write-Ok "Production containers removed"
+        } elseif (Test-Path "docker-compose.yml") {
+            Write-Info "Stopping production containers..."
+            $ErrorActionPreference = "Continue"
+            docker compose down -v 2>$null
+            $ErrorActionPreference = "Stop"
+            Write-Ok "Production containers removed"
+        }
+    }
+
+    # Remove dev PostgreSQL container
+    if ($hasContainer) {
+        Write-Info "Removing PostgreSQL container..."
+        $ErrorActionPreference = "Continue"
+        docker rm -f postgres-pipely 2>$null | Out-Null
+        $ErrorActionPreference = "Stop"
+        Write-Ok "Container postgres-pipely removed"
+    }
+
+    # Remove project directory
+    if ($hasLocalDir) {
+        if (Test-Path $DIR) {
+            Write-Info "Removing directory $DIR..."
+            Remove-Item -Recurse -Force $DIR
+            Write-Ok "Directory removed"
+        } else {
+            Write-Warn "You are inside the project directory."
+            Write-Info "Run this from the parent directory, then delete manually:"
+            Write-Host "  cd .. ; Remove-Item -Recurse -Force $(Split-Path -Leaf (Get-Location))" -ForegroundColor DarkGray
+        }
+    }
+
+    if ($hasProdDir) {
+        Write-Info "Removing production directory $DIR..."
+        Remove-Item -Recurse -Force $DIR
+        Write-Ok "Directory removed"
+    }
+
+    Write-Host ""
+    Write-Ok "Pipely AI has been uninstalled."
+    Write-Host ""
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════════
+
+# Handle --uninstall before mode detection
+if ($args[0] -in "--uninstall", "--remove") {
+    Invoke-Uninstall
+    exit 0
+}
 
 $mode = Get-Mode $args[0]
 

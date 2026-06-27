@@ -330,6 +330,24 @@ npm run dev:all          # Frontend + Backend + Agent
 
 ---
 
+## Uninstall
+
+Remove Pipely AI completely — project files, Docker containers, and database volumes.
+
+**Linux / macOS:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.sh | bash -s -- --uninstall
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.ps1 | iex -- --uninstall
+```
+
+> **Warning:** This is destructive and cannot be undone. All data (database, configuration, project files) will be permanently deleted.
+
+---
+
 ## License
 
 MIT — use it however you want.

@@ -493,8 +493,113 @@ show_local_summary() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# UNINSTALL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+uninstall() {
+  header "Uninstall"
+
+  printf "  ${RED}${BOLD}This will permanently remove Pipely AI:${RESET}\n"
+  echo ""
+
+  # Detect what exists
+  HAS_LOCAL_DIR=false
+  HAS_PROD_DIR=false
+  HAS_CONTAINER=false
+  HAS_PROD_CONTAINERS=false
+
+  if [ -d "$DIR" ] && [ -f "$DIR/package.json" ] && grep -q "pipely" "$DIR/package.json" 2>/dev/null; then
+    HAS_LOCAL_DIR=true
+    printf "  ${WARN} Directory: ${BOLD}$(pwd)/$DIR${RESET}\n"
+  elif [ -f "package.json" ] && grep -q "pipely" package.json 2>/dev/null; then
+    HAS_LOCAL_DIR=true
+    printf "  ${WARN} Directory: ${BOLD}$(pwd)${RESET}\n"
+  fi
+
+  if [ -d "$DIR" ] && [ -f "$DIR/docker-compose.yml" ] && ! [ -f "$DIR/package.json" ]; then
+    HAS_PROD_DIR=true
+    printf "  ${WARN} Production directory: ${BOLD}$(pwd)/$DIR${RESET}\n"
+  fi
+
+  if command -v docker >/dev/null 2>&1; then
+    if docker ps -aq -f name="postgres-pipely" 2>/dev/null | grep -q .; then
+      HAS_CONTAINER=true
+      printf "  ${WARN} Docker container: ${BOLD}postgres-pipely${RESET}\n"
+    fi
+
+    if [ "$HAS_PROD_DIR" = "true" ] || ([ -f "docker-compose.yml" ] && docker compose ps -q 2>/dev/null | grep -q .); then
+      HAS_PROD_CONTAINERS=true
+      printf "  ${WARN} Production containers (app + db)\n"
+    fi
+  fi
+
+  if [ "$HAS_LOCAL_DIR" = "false" ] && [ "$HAS_PROD_DIR" = "false" ] && [ "$HAS_CONTAINER" = "false" ] && [ "$HAS_PROD_CONTAINERS" = "false" ]; then
+    info "Nothing to uninstall."
+    exit 0
+  fi
+
+  echo ""
+  printf "  ${RED}Are you sure? This cannot be undone. (y/N):${RESET} "
+  read -r CONFIRM < /dev/tty
+  if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
+    info "Cancelled."
+    exit 0
+  fi
+  echo ""
+
+  # Stop and remove production containers
+  if [ "$HAS_PROD_CONTAINERS" = "true" ]; then
+    if [ "$HAS_PROD_DIR" = "true" ]; then
+      info "Stopping production containers..."
+      (cd "$DIR" && docker compose down -v 2>/dev/null) || true
+      success "Production containers removed"
+    elif [ -f "docker-compose.yml" ]; then
+      info "Stopping production containers..."
+      docker compose down -v 2>/dev/null || true
+      success "Production containers removed"
+    fi
+  fi
+
+  # Remove dev PostgreSQL container
+  if [ "$HAS_CONTAINER" = "true" ]; then
+    info "Removing PostgreSQL container..."
+    docker rm -f postgres-pipely >/dev/null 2>&1 || true
+    success "Container postgres-pipely removed"
+  fi
+
+  # Remove project directory
+  if [ "$HAS_LOCAL_DIR" = "true" ]; then
+    if [ -d "$DIR" ]; then
+      info "Removing directory $DIR..."
+      rm -rf "$DIR"
+      success "Directory removed"
+    else
+      warn "You are inside the project directory."
+      info "Run this from the parent directory, then delete manually:"
+      printf "  ${DIM}cd .. && rm -rf $(basename "$(pwd)")${RESET}\n"
+    fi
+  fi
+
+  if [ "$HAS_PROD_DIR" = "true" ]; then
+    info "Removing production directory $DIR..."
+    rm -rf "$DIR"
+    success "Directory removed"
+  fi
+
+  echo ""
+  success "Pipely AI has been uninstalled."
+  echo ""
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════════
+
+# Handle --uninstall before mode detection
+if [ "$1" = "--uninstall" ] || [ "$1" = "--remove" ]; then
+  uninstall
+  exit 0
+fi
 
 detect_mode "$1"
 
