@@ -381,6 +381,13 @@ export async function processBlock(
             await saveAgentLog(ownerCtx.ownerId, "status_changed", `Status → ${args.status} — "${task.title}"`, undefined, task.id, args);
           } else if (toolCall.function.name === "create_notification") {
             await saveAgentLog(ownerCtx.ownerId, toolResult.success ? "notification_sent" : "notification_error", toolResult.success ? `Notificacao criada — "${task.title}"` : `Erro na notificacao — "${task.title}"`, args.message, task.id, args);
+          } else if (toolCall.function.name === "send_whatsapp_buttons") {
+            const btnLabels = (args.buttons || []).map((b: Record<string, string>) => b.text).join(", ");
+            await saveAgentLog(ownerCtx.ownerId, toolResult.success ? "buttons_sent" : "buttons_error", toolResult.success ? `Botoes enviados — "${task.title}"` : `Erro botoes — "${task.title}"`, `${args.text} | Botoes: ${btnLabels}`, task.id, args);
+          } else if (toolCall.function.name === "send_whatsapp_poll") {
+            await saveAgentLog(ownerCtx.ownerId, toolResult.success ? "poll_sent" : "poll_error", toolResult.success ? `Enquete enviada — "${task.title}"` : `Erro enquete — "${task.title}"`, `${args.question} | Opcoes: ${(args.options || []).join(", ")}`, task.id, args);
+          } else if (toolCall.function.name === "send_whatsapp_list") {
+            await saveAgentLog(ownerCtx.ownerId, toolResult.success ? "list_sent" : "list_error", toolResult.success ? `Lista enviada — "${task.title}"` : `Erro lista — "${task.title}"`, args.title, task.id, args);
           } else {
             await saveAgentLog(ownerCtx.ownerId, "tool_call", `${toolCall.function.name} — "${task.title}"`, JSON.stringify(args), task.id, args);
           }

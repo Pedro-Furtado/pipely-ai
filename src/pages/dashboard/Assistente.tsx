@@ -44,6 +44,12 @@ const LOG_TYPE_CONFIG: Record<string, { label: string; color: string; icon: type
   status_changed: { label: 'Status', color: 'text-cyan-400 bg-cyan-500/10', icon: RefreshCw },
   notification_sent: { label: 'Notificacao', color: 'text-green-400 bg-green-500/10', icon: Send },
   notification_error: { label: 'Erro notif.', color: 'text-red-400 bg-red-500/10', icon: AlertTriangle },
+  buttons_sent: { label: 'Botoes', color: 'text-green-400 bg-green-500/10', icon: Send },
+  buttons_error: { label: 'Erro botoes', color: 'text-red-400 bg-red-500/10', icon: AlertTriangle },
+  poll_sent: { label: 'Enquete', color: 'text-green-400 bg-green-500/10', icon: Send },
+  poll_error: { label: 'Erro enquete', color: 'text-red-400 bg-red-500/10', icon: AlertTriangle },
+  list_sent: { label: 'Lista', color: 'text-green-400 bg-green-500/10', icon: Send },
+  list_error: { label: 'Erro lista', color: 'text-red-400 bg-red-500/10', icon: AlertTriangle },
   error: { label: 'Erro', color: 'text-red-400 bg-red-500/10', icon: AlertTriangle },
 }
 

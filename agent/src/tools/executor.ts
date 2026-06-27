@@ -1,6 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { log } from "../lib/logger.js";
-import { sendWhatsAppMessage } from "../lib/evolution.js";
+import { sendWhatsAppMessage, sendWhatsAppButtons, sendWhatsAppPoll, sendWhatsAppList } from "../lib/evolution.js";
 
 interface ToolCall {
   name: string;
@@ -129,6 +129,53 @@ export async function executeTool(
         log.error("TOOL", "Retry task failed", err);
         return JSON.stringify({ success: false, error: String(err) });
       }
+    }
+
+    case "send_whatsapp_buttons": {
+      if (!ctx.evolutionUrl || !ctx.instanceToken) {
+        return JSON.stringify({ success: false, error: "WhatsApp not configured" });
+      }
+      const buttons = (args.buttons || []).map((b: Record<string, string>) => ({ id: b.id, text: b.text }));
+      const sent = await sendWhatsAppButtons(
+        args.remote_jid,
+        args.text,
+        buttons,
+        ctx.evolutionUrl,
+        ctx.instanceToken,
+        args.footer
+      );
+      return JSON.stringify({ success: sent });
+    }
+
+    case "send_whatsapp_poll": {
+      if (!ctx.evolutionUrl || !ctx.instanceToken) {
+        return JSON.stringify({ success: false, error: "WhatsApp not configured" });
+      }
+      const sent = await sendWhatsAppPoll(
+        args.remote_jid,
+        args.question,
+        args.options || [],
+        ctx.evolutionUrl,
+        ctx.instanceToken,
+        Number(args.max_answers) || 1
+      );
+      return JSON.stringify({ success: sent });
+    }
+
+    case "send_whatsapp_list": {
+      if (!ctx.evolutionUrl || !ctx.instanceToken) {
+        return JSON.stringify({ success: false, error: "WhatsApp not configured" });
+      }
+      const sent = await sendWhatsAppList(
+        args.remote_jid,
+        args.title,
+        args.description,
+        args.button_text,
+        args.sections || [],
+        ctx.evolutionUrl,
+        ctx.instanceToken
+      );
+      return JSON.stringify({ success: sent });
     }
 
     case "log_action": {

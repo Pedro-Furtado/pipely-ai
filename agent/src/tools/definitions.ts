@@ -138,6 +138,136 @@ export const TOOLS: ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "send_whatsapp_buttons",
+      description:
+        "Envia uma mensagem com botoes interativos no WhatsApp. " +
+        "O usuario pode clicar em um dos botoes para responder rapidamente. " +
+        "Use quando quiser dar opcoes claras ao responsavel (ex: 'Sim' / 'Nao' / 'Depois'). " +
+        "Maximo 3 botoes.",
+      parameters: {
+        type: "object",
+        properties: {
+          remote_jid: {
+            type: "string",
+            description: "O remoteJid do destinatario (ex: 5511999999999@s.whatsapp.net)",
+          },
+          text: {
+            type: "string",
+            description: "Texto principal da mensagem.",
+          },
+          footer: {
+            type: "string",
+            description: "Texto do rodape (opcional, menor e cinza).",
+          },
+          buttons: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string", description: "ID unico do botao." },
+                text: { type: "string", description: "Texto exibido no botao." },
+              },
+              required: ["id", "text"],
+            },
+            description: "Array de botoes (max 3). Cada botao tem id e text.",
+          },
+        },
+        required: ["remote_jid", "text", "buttons"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_whatsapp_poll",
+      description:
+        "Envia uma enquete (poll) no WhatsApp. " +
+        "O usuario pode votar em uma ou mais opcoes. " +
+        "Use quando quiser coletar opiniao ou fazer o responsavel escolher entre varias opcoes. " +
+        "Maximo 12 opcoes.",
+      parameters: {
+        type: "object",
+        properties: {
+          remote_jid: {
+            type: "string",
+            description: "O remoteJid do destinatario (ex: 5511999999999@s.whatsapp.net)",
+          },
+          question: {
+            type: "string",
+            description: "Pergunta da enquete.",
+          },
+          options: {
+            type: "array",
+            items: { type: "string" },
+            description: "Array de opcoes da enquete (min 2, max 12).",
+          },
+          max_answers: {
+            type: "number",
+            description: "Numero maximo de respostas que o usuario pode selecionar. Default: 1.",
+          },
+        },
+        required: ["remote_jid", "question", "options"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_whatsapp_list",
+      description:
+        "Envia uma mensagem com lista de opcoes no WhatsApp. " +
+        "O usuario clica no botao para ver as opcoes organizadas em secoes. " +
+        "Use quando tiver muitas opcoes (mais de 3) para o responsavel escolher.",
+      parameters: {
+        type: "object",
+        properties: {
+          remote_jid: {
+            type: "string",
+            description: "O remoteJid do destinatario (ex: 5511999999999@s.whatsapp.net)",
+          },
+          title: {
+            type: "string",
+            description: "Titulo da mensagem.",
+          },
+          description: {
+            type: "string",
+            description: "Descricao da mensagem.",
+          },
+          button_text: {
+            type: "string",
+            description: "Texto do botao que abre a lista (ex: 'Ver opcoes').",
+          },
+          sections: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                title: { type: "string", description: "Titulo da secao." },
+                rows: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string", description: "ID unico da opcao." },
+                      title: { type: "string", description: "Titulo da opcao." },
+                      description: { type: "string", description: "Descricao da opcao." },
+                    },
+                    required: ["id", "title"],
+                  },
+                },
+              },
+              required: ["title", "rows"],
+            },
+            description: "Secoes da lista, cada uma com titulo e opcoes.",
+          },
+        },
+        required: ["remote_jid", "title", "description", "button_text", "sections"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "log_action",
       description:
         "Registra uma acao no log do sistema. Use para documentar decisoes tomadas pelo agente.",
