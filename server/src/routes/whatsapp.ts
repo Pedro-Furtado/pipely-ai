@@ -312,9 +312,9 @@ router.get("/instances/:instanceId/webhook", async (req: Request, res: Response)
       return;
     }
 
-    const result = await evolutionFetch(req.userId, `/instance/${req.params.instanceId}/advanced-settings`, "GET", undefined, verified.token);
+    const result = await evolutionFetch(req.userId, `/instance/get/${req.params.instanceId}`, "GET", undefined, verified.token);
     const data = result.data as Record<string, unknown>;
-    logger.info("WHATSAPP", "Advanced settings response", { data: JSON.stringify(data).substring(0, 800) });
+    logger.info("WHATSAPP", "Instance get response", { data: JSON.stringify(data).substring(0, 1000) });
 
     const nested = (data?.data as Record<string, unknown>) || data;
     // Try multiple field names for webhook URL
