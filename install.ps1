@@ -307,7 +307,9 @@ function Install-Local {
         Write-Ok "Root dependencies (already installed)"
     } else {
         Write-Info "Installing root dependencies..."
-        npm install
+        $ErrorActionPreference = "Continue"
+        npm install 2>&1 | Out-Null
+        $ErrorActionPreference = "Stop"
         Write-Ok "Root dependencies"
     }
 
@@ -315,7 +317,9 @@ function Install-Local {
         Write-Ok "Server dependencies (already installed)"
     } else {
         Write-Info "Installing server dependencies..."
-        Push-Location server; npm install; Pop-Location
+        $ErrorActionPreference = "Continue"
+        Push-Location server; npm install 2>&1 | Out-Null; Pop-Location
+        $ErrorActionPreference = "Stop"
         Write-Ok "Server dependencies"
     }
 
@@ -323,7 +327,9 @@ function Install-Local {
         Write-Ok "Agent dependencies (already installed)"
     } else {
         Write-Info "Installing agent dependencies..."
-        Push-Location agent; npm install; Pop-Location
+        $ErrorActionPreference = "Continue"
+        Push-Location agent; npm install 2>&1 | Out-Null; Pop-Location
+        $ErrorActionPreference = "Stop"
         Write-Ok "Agent dependencies"
     }
 
@@ -376,11 +382,15 @@ function Install-Local {
     }
 
     Write-Info "Syncing database schema..."
-    Push-Location server; npm run db:push 2>&1 | Select-Object -Last 1; Pop-Location
+    $ErrorActionPreference = "Continue"
+    Push-Location server; npm run db:push 2>&1 | Out-Null; Pop-Location
+    $ErrorActionPreference = "Stop"
     Write-Ok "Schema synced"
 
     Write-Info "Generating Prisma client..."
-    Push-Location server; npm run db:generate 2>&1 | Select-Object -Last 1; Pop-Location
+    $ErrorActionPreference = "Continue"
+    Push-Location server; npm run db:generate 2>&1 | Out-Null; Pop-Location
+    $ErrorActionPreference = "Stop"
     Write-Ok "Prisma client generated"
 
     # ── Done ──────────────────────────────────────────────────────────────────
