@@ -44,8 +44,8 @@ function Get-CommandVersion($cmd) {
 function Get-Mode {
     param([string]$arg)
 
-    if ($arg -in "--production", "--prod", "-p") { return "production" }
-    if ($arg -in "--local", "--dev", "-d") { return "local" }
+    if ($arg -in "--production", "--prod", "-p", "prod", "production") { return "production" }
+    if ($arg -in "--local", "--dev", "-d", "local", "dev") { return "local" }
 
     Write-Header "Installer"
 
@@ -544,13 +544,19 @@ function Invoke-Uninstall {
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# When piped via iex, $args is empty — use env var instead
+$action = if ($args[0]) { $args[0] } else { $env:PIPELY_ACTION }
+
+# Clean up env var after reading
+if ($env:PIPELY_ACTION) { Remove-Item Env:PIPELY_ACTION -ErrorAction SilentlyContinue }
+
 # Handle --uninstall before mode detection
-if ($args[0] -in "--uninstall", "--remove") {
+if ($action -in "--uninstall", "--remove", "uninstall", "remove") {
     Invoke-Uninstall
     exit 0
 }
 
-$mode = Get-Mode $args[0]
+$mode = Get-Mode $action
 
 switch ($mode) {
     "production" { Install-Production }

@@ -69,10 +69,10 @@ curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/instal
 
 ```powershell
 # Windows — production
-irm https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.ps1 | iex -- --prod
+$env:PIPELY_ACTION="prod"; irm https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.ps1 | iex
 
 # Windows — local development
-irm https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.ps1 | iex -- --local
+$env:PIPELY_ACTION="local"; irm https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.ps1 | iex
 ```
 
 ### What the installer checks
@@ -287,7 +287,7 @@ curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/instal
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.ps1 | iex -- --local
+$env:PIPELY_ACTION="local"; irm https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.ps1 | iex
 ```
 
 Or manually:
@@ -341,7 +341,7 @@ curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/instal
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.ps1 | iex -- --uninstall
+$env:PIPELY_ACTION="uninstall"; irm https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.ps1 | iex
 ```
 
 > **Warning:** This is destructive and cannot be undone. All data (database, configuration, project files) will be permanently deleted.
