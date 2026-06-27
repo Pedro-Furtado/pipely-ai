@@ -41,6 +41,13 @@ export async function executeTool(
 
     case "move_task": {
       try {
+        // Validate target block exists
+        const targetBlock = await prisma.pipelineBlock.findUnique({ where: { id: args.target_block_id }, select: { id: true } });
+        if (!targetBlock) {
+          log.warn("TOOL", `Target block ${args.target_block_id} not found`);
+          return JSON.stringify({ success: false, error: "Target block not found" });
+        }
+
         // Close previous log
         await prisma.taskLog.updateMany({
           where: { taskId: args.task_id, leftAt: null },

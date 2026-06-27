@@ -129,23 +129,28 @@ export async function processBlock(
   const noReplyMinutes = (config.no_reply_minutes as number) || 0;
   const noReplyBlockId = (config.no_reply_block_id as string) || "";
   if (noReplyMinutes > 0 && noReplyBlockId) {
-    for (const task of tasks) {
-      // Only check tasks that were already processed (message was sent)
-      if (!task.processedAt) continue; // Not processed yet — skip no-reply check
+    const targetExists = await prisma.pipelineBlock.findUnique({ where: { id: noReplyBlockId }, select: { id: true } });
+    if (!targetExists) {
+      log.warn("PROCESSOR", `No-reply target block ${noReplyBlockId} not found, skipping`);
+    } else {
+      for (const task of tasks) {
+        // Only check tasks that were already processed (message was sent)
+        if (!task.processedAt) continue; // Not processed yet — skip no-reply check
 
-      if (task.minutesInBlock >= noReplyMinutes) {
-        await prisma.taskLog.updateMany({
-          where: { taskId: task.id, leftAt: null },
-          data: { leftAt: new Date() },
-        });
-        await prisma.task.update({
-          where: { id: task.id },
-          data: { blockId: noReplyBlockId, enteredAt: new Date(), processedAt: null },
-        });
-        await prisma.taskLog.create({
-          data: { taskId: task.id, blockId: noReplyBlockId },
-        });
-        log.info("PROCESSOR", `No-reply: task "${task.title}" moved after ${task.minutesInBlock}min`);
+        if (task.minutesInBlock >= noReplyMinutes) {
+          await prisma.taskLog.updateMany({
+            where: { taskId: task.id, leftAt: null },
+            data: { leftAt: new Date() },
+          });
+          await prisma.task.update({
+            where: { id: task.id },
+            data: { blockId: noReplyBlockId, enteredAt: new Date(), processedAt: null },
+          });
+          await prisma.taskLog.create({
+            data: { taskId: task.id, blockId: noReplyBlockId },
+          });
+          log.info("PROCESSOR", `No-reply: task "${task.title}" moved after ${task.minutesInBlock}min`);
+        }
       }
     }
   }
@@ -157,6 +162,12 @@ export async function processBlock(
     const nextBlockId = (config.next_block_id as string) || "";
 
     if (delayMinutes > 0 && nextBlockId) {
+      const targetExists = await prisma.pipelineBlock.findUnique({ where: { id: nextBlockId }, select: { id: true } });
+      if (!targetExists) {
+        log.warn("PROCESSOR", `Auto-advance target block ${nextBlockId} not found in "${block.name}", skipping`);
+        return;
+      }
+
       const movedIds: string[] = [];
       const waitingIds: string[] = [];
 
