@@ -85,6 +85,24 @@ router.post("/setup", async (req: Request, res: Response) => {
     clearSetupCache();
     logger.info("AUTH", "Owner account created", { userId: user.id, email });
 
+    // Auto-configure WhatsApp if Evolution Go is bundled
+    const evolutionUrl = process.env.EVOLUTION_SERVER_URL;
+    const evolutionKey = process.env.EVOLUTION_API_KEY;
+    if (evolutionUrl && evolutionKey) {
+      try {
+        await prisma.whatsAppConfig.create({
+          data: {
+            userId: user.id,
+            serverUrl: evolutionUrl,
+            globalApiKey: evolutionKey,
+          },
+        });
+        logger.info("AUTH", "Auto-configured WhatsApp (bundled Evolution Go)");
+      } catch {
+        logger.warn("AUTH", "Could not auto-configure WhatsApp");
+      }
+    }
+
     res.status(201).json({
       success: true,
       message: "Conta de proprietario criada com sucesso",

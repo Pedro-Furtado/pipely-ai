@@ -15,11 +15,14 @@ router.get("/config", async (req: Request, res: Response) => {
       where: { userId: req.userId },
     });
 
+    const isBundled = !!(process.env.EVOLUTION_SERVER_URL && process.env.EVOLUTION_API_KEY);
+
     res.json({
       success: true,
       data: config
-        ? { id: config.id, serverUrl: config.serverUrl }
+        ? { id: config.id, serverUrl: config.serverUrl, isBundled }
         : null,
+      isBundled,
     });
   } catch (error) {
     logger.error("WHATSAPP", "Get config failed", error);
@@ -151,15 +154,24 @@ router.post("/instances", async (req: Request, res: Response) => {
     const crypto = await import("crypto");
     const instanceToken = token?.trim() || crypto.randomBytes(24).toString("hex");
 
+    // Auto-detect webhook URL:
+    // 1. Explicit webhookUrl from frontend
+    // 2. Bundled mode (EVOLUTION_SERVER_URL set) — agent is at http://app:3335/webhook
+    // 3. BACKEND_URL based — derive agent URL
+    let resolvedWebhook = webhookUrl?.trim() || "";
+    if (!resolvedWebhook && process.env.EVOLUTION_SERVER_URL) {
+      // Bundled mode — use internal Docker network
+      resolvedWebhook = "http://app:3335/webhook";
+    }
+
     const createBody: Record<string, unknown> = {
       name: name.trim(),
       token: instanceToken,
     };
 
-    // Include webhook in advanced settings if provided
-    if (webhookUrl?.trim()) {
+    if (resolvedWebhook) {
       createBody.advancedSettings = {
-        webhookUrl: webhookUrl.trim(),
+        webhookUrl: resolvedWebhook,
       };
     }
 
@@ -172,7 +184,17 @@ router.post("/instances", async (req: Request, res: Response) => {
       return;
     }
 
-    logger.info("WHATSAPP", "Instance created", { name: name.trim() });
+    // Save webhook URL locally
+    if (resolvedWebhook) {
+      try {
+        await prisma.whatsAppConfig.update({
+          where: { userId: req.userId },
+          data: { webhookUrl: resolvedWebhook },
+        });
+      } catch { /* non-fatal */ }
+    }
+
+    logger.info("WHATSAPP", "Instance created", { name: name.trim(), webhook: resolvedWebhook || "none" });
     res.status(201).json({ success: true, data: data?.data || data });
   } catch (error) {
     if (error instanceof Error && error.message === "NO_CONFIG") {

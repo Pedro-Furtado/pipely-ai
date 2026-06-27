@@ -4,6 +4,7 @@ import type { ApiResponse } from '@/types/auth'
 export interface WhatsAppConfig {
   id: string
   serverUrl: string
+  isBundled?: boolean
 }
 
 export interface EvolutionInstance {

@@ -51,6 +51,7 @@ const RAILWAY_DEPLOY_URL = 'https://railway.com/deploy/evolution-go'
 
 export default function WhatsApp() {
   const [config, setConfig] = useState<WhatsAppConfig | null>(null)
+  const [isBundled, setIsBundled] = useState(false)
   const [instances, setInstances] = useState<EvolutionInstance[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingInstances, setLoadingInstances] = useState(false)
@@ -86,10 +87,13 @@ export default function WhatsApp() {
   async function loadConfig() {
     try {
       const res = await whatsappService.getConfig()
-      if (res.success && res.data) {
-        setConfig(res.data)
-        loadInstances()
-        loadWebhook()
+      if (res.success) {
+        setIsBundled(!!(res as Record<string, unknown>).isBundled)
+        if (res.data) {
+          setConfig(res.data)
+          loadInstances()
+          if (!res.data.isBundled) loadWebhook()
+        }
       }
     } catch { /* silent */ }
     finally {
@@ -345,7 +349,9 @@ export default function WhatsApp() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-zinc-50">WhatsApp</h1>
-          <p className="text-sm text-zinc-400">{config.serverUrl}</p>
+          <p className="text-sm text-zinc-400">
+            {isBundled ? 'Evolution Go integrado' : config.serverUrl}
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={loadInstances} disabled={loadingInstances}>
@@ -355,20 +361,24 @@ export default function WhatsApp() {
             <Plus size={14} />
             Nova instancia
           </Button>
-          <a href={`${config.serverUrl}/manager`} target="_blank" rel="noopener noreferrer">
-            <Button variant="outline" size="sm">
-              <ExternalLink size={14} />
-              Manager
-            </Button>
-          </a>
-          <Button variant="outline" size="sm" onClick={openEditConfig} className="text-zinc-400">
-            <Settings size={14} />
-          </Button>
+          {!isBundled && (
+            <>
+              <a href={`${config.serverUrl}/manager`} target="_blank" rel="noopener noreferrer">
+                <Button variant="outline" size="sm">
+                  <ExternalLink size={14} />
+                  Manager
+                </Button>
+              </a>
+              <Button variant="outline" size="sm" onClick={openEditConfig} className="text-zinc-400">
+                <Settings size={14} />
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Webhook config */}
-      {!webhookUrl ? (
+      {/* Webhook config — only show in non-bundled mode */}
+      {!isBundled && !webhookUrl ? (
         <Card className="border-amber-500/30 bg-amber-500/5">
           <CardContent className="p-4 space-y-2">
             <p className="text-sm font-medium text-amber-400">
