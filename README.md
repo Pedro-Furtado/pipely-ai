@@ -36,50 +36,40 @@ Pipely AI automates task management through visual pipelines connected to WhatsA
 
 ---
 
-## Quick Deploy (Production)
+## Quick Start
 
-One command. Works on any VPS with Ubuntu/Debian.
+One command to install. Works on **VPS (production)** and **local machine (development)**.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.sh | sh
 ```
 
-This will:
-1. Install Docker (if not installed)
-2. Generate unique credentials (DB password, JWT secret)
-3. Start PostgreSQL + App containers
-4. Show your setup URL and key
+The installer will ask you to choose:
 
-After install, open `http://YOUR_IP/setup` and create your owner account.
+| Mode | What it does |
+|------|-------------|
+| **Production** | Installs Docker, generates credentials, starts containers, shows setup URL |
+| **Local Dev** | Checks Node.js, clones repo, installs dependencies, sets up PostgreSQL, runs Prisma |
 
-### Manual Deploy
-
-```bash
-mkdir pipely-ai && cd pipely-ai
-
-# Download files
-curl -O https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/docker-compose.prod.yml
-curl -O https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/setup.sh
-chmod +x setup.sh
-
-# Generate credentials
-./setup.sh
-
-# Start
-docker compose -f docker-compose.prod.yml up -d
-
-# View logs (setup key appears here)
-docker compose -f docker-compose.prod.yml logs app
-```
-
-### Custom Port
-
-If port 80 is in use, edit `.env` before starting:
+You can also skip the prompt:
 
 ```bash
-nano .env
-# Change APP_PORT=80 to APP_PORT=3002 (or any free port)
+# Production directly
+curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.sh | sh -s -- --prod
+
+# Local development directly
+curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.sh | sh -s -- --local
 ```
+
+### What the installer checks
+
+| Dependency | Production | Local Dev |
+|------------|-----------|-----------|
+| Docker | Required (auto-installs) | Optional (for PostgreSQL) |
+| Node.js 18+ | — | Required |
+| Git | — | Required (to clone repo) |
+
+After install, the script shows you the exact next steps.
 
 ---
 
@@ -274,28 +264,30 @@ cat .env
 
 ## Local Development
 
+The fastest way:
+
 ```bash
-# 1. PostgreSQL
+curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.sh | sh -s -- --local
+```
+
+Or manually:
+
+```bash
+git clone https://github.com/Pedro-Furtado/pipely-ai.git && cd pipely-ai
+
+# PostgreSQL
 docker run --name postgres-pipely \
   -e POSTGRES_USER=pipely \
   -e POSTGRES_PASSWORD=pipely123 \
   -e POSTGRES_DB=pipely_ai \
   -p 5433:5432 -d postgres:17
 
-# 2. Install dependencies
-npm install
-cd server && npm install && cd ..
-cd agent && npm install && cd ..
-
-# 3. Configure environment
-cp .env.example .env
-cp server/.env.example server/.env
-cp agent/.env.example agent/.env
-
-# 4. Database setup
+# Install & configure
+npm install && cd server && npm install && cd .. && cd agent && npm install && cd ..
+cp .env.example .env && cp server/.env.example server/.env && cp agent/.env.example agent/.env
 cd server && npm run db:push && npm run db:generate && cd ..
 
-# 5. Run
+# Run
 npm run dev:all          # Frontend + Backend
 cd agent && npm run dev  # Agent (separate terminal)
 ```
