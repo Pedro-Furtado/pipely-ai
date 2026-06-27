@@ -10,7 +10,6 @@ import {
   RefreshCw,
   CheckCircle2,
   AlertCircle,
-  Rocket,
   Plus,
   MessageCircle,
 } from 'lucide-react'
@@ -46,8 +45,6 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
-
-const RAILWAY_DEPLOY_URL = 'https://railway.com/deploy/evolution-go'
 
 export default function WhatsApp() {
   const [config, setConfig] = useState<WhatsAppConfig | null>(null)
@@ -284,6 +281,22 @@ export default function WhatsApp() {
 
   // No config — setup
   if (!config) {
+    if (isBundled) {
+      // Bundled mode but no config — shouldn't happen, reload
+      return (
+        <EmptyState
+          icon={MessageCircle}
+          title="Configurando WhatsApp..."
+          description="A conexao com Evolution Go sera configurada automaticamente. Recarregue a pagina."
+        >
+          <Button size="sm" onClick={() => window.location.reload()}>
+            <RefreshCw size={14} />
+            Recarregar
+          </Button>
+        </EmptyState>
+      )
+    }
+
     return (
       <div className="space-y-6">
         <div>
@@ -291,54 +304,27 @@ export default function WhatsApp() {
           <p className="text-sm text-zinc-400">Conecte sua instancia Evolution Go.</p>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-500/20 text-xs font-bold text-blue-400">1</div>
-                <CardTitle className="text-sm">Deploy no Railway</CardTitle>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Conectar servidor</CardTitle>
+            <CardDescription>Cole a URL e API Key do seu servidor Evolution Go.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSaveConfig} className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="setup-url" className="text-xs">URL do servidor</Label>
+                <Input id="setup-url" placeholder="http://localhost:8080" value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} disabled={savingConfig} />
               </div>
-              <CardDescription>Suba sua instancia da Evolution Go com um clique.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="mb-4 text-xs text-zinc-500">
-                Apos o deploy, copie a URL e a API Key gerada.
-              </p>
-              <a href={RAILWAY_DEPLOY_URL} target="_blank" rel="noopener noreferrer">
-                <Button variant="outline" className="w-full gap-2">
-                  <Rocket size={16} />
-                  Deploy Evolution Go
-                  <ExternalLink size={12} />
-                </Button>
-              </a>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-500/20 text-xs font-bold text-blue-400">2</div>
-                <CardTitle className="text-sm">Conectar</CardTitle>
+              <div className="space-y-1.5">
+                <Label htmlFor="setup-key" className="text-xs">API Key (Global)</Label>
+                <Input id="setup-key" type="password" placeholder="Sua chave de API" value={apiKey} onChange={(e) => setApiKey(e.target.value)} disabled={savingConfig} />
               </div>
-              <CardDescription>Cole as credenciais do seu servidor.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSaveConfig} className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="setup-url" className="text-xs">URL do servidor</Label>
-                  <Input id="setup-url" placeholder="https://seu-app.railway.app" value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} disabled={savingConfig} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="setup-key" className="text-xs">API Key (Global)</Label>
-                  <Input id="setup-key" type="password" placeholder="Sua chave de API" value={apiKey} onChange={(e) => setApiKey(e.target.value)} disabled={savingConfig} />
-                </div>
-                <Button type="submit" className="w-full" disabled={savingConfig || !serverUrl.trim() || !apiKey.trim()}>
-                  {savingConfig ? <Spinner size="sm" /> : 'Conectar'}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
+              <Button type="submit" className="w-full" disabled={savingConfig || !serverUrl.trim() || !apiKey.trim()}>
+                {savingConfig ? <Spinner size="sm" /> : 'Conectar'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     )
   }

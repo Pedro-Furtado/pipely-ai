@@ -404,10 +404,14 @@ install_local() {
   copy_env_if_needed "server/.env.example" "server/.env" "Server .env"
   copy_env_if_needed "agent/.env.example" "agent/.env" "Agent .env"
 
-  # ── Step 5: Database setup ─────────────────────────────────────────────────
-  step 5 "Database setup"
+  # ── Step 5: Database + Evolution Go ────────────────────────────────────────
+  step 5 "Database + Evolution Go"
+
+  EVOLUTION_PORT="8080"
+  EVOLUTION_KEY="pipely-dev-key"
 
   if [ "$HAS_DOCKER" = "true" ]; then
+    # PostgreSQL
     CONTAINER_NAME="postgres-pipely"
     RUNNING=$(docker ps -q -f name="$CONTAINER_NAME" 2>/dev/null || echo "")
     EXISTS=$(docker ps -aq -f name="$CONTAINER_NAME" 2>/dev/null || echo "")
@@ -430,13 +434,38 @@ install_local() {
       info "Waiting for database to be ready..."
       sleep 3
     fi
+
+    # Evolution Go
+    EVO_CONTAINER="evolution-pipely"
+    EVO_RUNNING=$(docker ps -q -f name="$EVO_CONTAINER" 2>/dev/null || echo "")
+    EVO_EXISTS=$(docker ps -aq -f name="$EVO_CONTAINER" 2>/dev/null || echo "")
+
+    if [ -n "$EVO_RUNNING" ]; then
+      success "Evolution Go container already running"
+    elif [ -n "$EVO_EXISTS" ]; then
+      info "Starting existing Evolution Go container..."
+      docker start "$EVO_CONTAINER" >/dev/null
+      success "Evolution Go container started"
+    else
+      info "Creating Evolution Go container..."
+      docker run --name "$EVO_CONTAINER" \
+        -e GLOBAL_API_KEY="$EVOLUTION_KEY" \
+        -e CLIENT_NAME="pipely" \
+        -e SERVER_PORT="8080" \
+        -e DATABASE_SAVE_MESSAGES="true" \
+        -e POSTGRES_AUTH_DB="postgresql://${DB_USER}:${DB_PASS}@host.docker.internal:${DB_PORT}/${DB_NAME}?sslmode=disable" \
+        -e POSTGRES_USERS_DB="postgresql://${DB_USER}:${DB_PASS}@host.docker.internal:${DB_PORT}/${DB_NAME}?sslmode=disable" \
+        -e LOGTYPE="text" \
+        -e WA_DEBUG="false" \
+        -p "$EVOLUTION_PORT":8080 \
+        -d ghcr.io/evolutionapi/evolution-go:latest >/dev/null
+      success "Evolution Go container created (port $EVOLUTION_PORT)"
+    fi
   else
-    warn "Set up PostgreSQL manually with these credentials:"
+    warn "Docker not found — set up PostgreSQL and Evolution Go manually"
     echo ""
-    printf "  ${DIM}User:     $DB_USER${RESET}\n"
-    printf "  ${DIM}Password: $DB_PASS${RESET}\n"
-    printf "  ${DIM}Database: $DB_NAME${RESET}\n"
-    printf "  ${DIM}Port:     $DB_PORT${RESET}\n"
+    printf "  ${DIM}Database: ${DB_USER}:${DB_PASS}@localhost:${DB_PORT}/${DB_NAME}${RESET}\n"
+    printf "  ${DIM}Evolution Go: https://github.com/EvolutionAPI/evolution-go${RESET}\n"
     echo ""
   fi
 
@@ -527,6 +556,11 @@ uninstall() {
       printf "  ${WARN} Docker container: ${BOLD}postgres-pipely${RESET}\n"
     fi
 
+    if docker ps -aq -f name="evolution-pipely" 2>/dev/null | grep -q .; then
+      HAS_CONTAINER=true
+      printf "  ${WARN} Docker container: ${BOLD}evolution-pipely${RESET}\n"
+    fi
+
     if [ "$HAS_PROD_DIR" = "true" ] || ([ -f "docker-compose.yml" ] && docker compose ps -q 2>/dev/null | grep -q .); then
       HAS_PROD_CONTAINERS=true
       printf "  ${WARN} Production containers (app + db)\n"
@@ -560,10 +594,11 @@ uninstall() {
     fi
   fi
 
-  # Remove dev PostgreSQL container
+  # Remove dev containers
   if [ "$HAS_CONTAINER" = "true" ]; then
-    info "Removing PostgreSQL container..."
+    info "Removing containers..."
     docker rm -f postgres-pipely >/dev/null 2>&1 || true
+    docker rm -f evolution-pipely >/dev/null 2>&1 || true
     success "Container postgres-pipely removed"
   fi
 

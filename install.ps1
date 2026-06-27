@@ -340,16 +340,20 @@ function Install-Local {
     Copy-EnvIfNeeded "server/.env.example" "server/.env" "Server .env"
     Copy-EnvIfNeeded "agent/.env.example" "agent/.env" "Agent .env"
 
-    # ── Step 5: Database setup ────────────────────────────────────────────────
-    Write-Step 5 $totalSteps "Database setup"
+    # ── Step 5: Database + Evolution Go ────────────────────────────────────────
+    Write-Step 5 $totalSteps "Database + Evolution Go"
 
     $dbUser = "pipely"
     $dbPass = "pipely123"
     $dbPort = "5433"
     $dbName = "pipely_ai"
     $containerName = "postgres-pipely"
+    $evoContainer = "evolution-pipely"
+    $evoPort = "8080"
+    $evoKey = "pipely-dev-key"
 
     if ($hasDocker) {
+        # PostgreSQL
         $running = docker ps -q -f "name=$containerName" 2>$null
         $exists = docker ps -aq -f "name=$containerName" 2>$null
 
@@ -371,13 +375,39 @@ function Install-Local {
             Write-Info "Waiting for database to be ready..."
             Start-Sleep -Seconds 3
         }
+
+        # Evolution Go
+        $evoRunning = docker ps -q -f "name=$evoContainer" 2>$null
+        $evoExists = docker ps -aq -f "name=$evoContainer" 2>$null
+
+        if ($evoRunning) {
+            Write-Ok "Evolution Go container already running"
+        } elseif ($evoExists) {
+            Write-Info "Starting existing Evolution Go container..."
+            docker start $evoContainer | Out-Null
+            Write-Ok "Evolution Go container started"
+        } else {
+            Write-Info "Creating Evolution Go container..."
+            $ErrorActionPreference = "Continue"
+            docker run --name $evoContainer `
+                -e "GLOBAL_API_KEY=$evoKey" `
+                -e "CLIENT_NAME=pipely" `
+                -e "SERVER_PORT=8080" `
+                -e "DATABASE_SAVE_MESSAGES=true" `
+                -e "POSTGRES_AUTH_DB=postgresql://${dbUser}:${dbPass}@host.docker.internal:${dbPort}/${dbName}?sslmode=disable" `
+                -e "POSTGRES_USERS_DB=postgresql://${dbUser}:${dbPass}@host.docker.internal:${dbPort}/${dbName}?sslmode=disable" `
+                -e "LOGTYPE=text" `
+                -e "WA_DEBUG=false" `
+                -p "${evoPort}:8080" `
+                -d ghcr.io/evolutionapi/evolution-go:latest 2>&1 | Out-Null
+            $ErrorActionPreference = "Stop"
+            Write-Ok "Evolution Go container created (port $evoPort)"
+        }
     } else {
-        Write-Warn "Set up PostgreSQL manually with these credentials:"
+        Write-Warn "Docker not found — set up PostgreSQL and Evolution Go manually"
         Write-Host ""
-        Write-Host "  User:     $dbUser" -ForegroundColor DarkGray
-        Write-Host "  Password: $dbPass" -ForegroundColor DarkGray
-        Write-Host "  Database: $dbName" -ForegroundColor DarkGray
-        Write-Host "  Port:     $dbPort" -ForegroundColor DarkGray
+        Write-Host "  Database: ${dbUser}:${dbPass}@localhost:${dbPort}/${dbName}" -ForegroundColor DarkGray
+        Write-Host "  Evolution Go: https://github.com/EvolutionAPI/evolution-go" -ForegroundColor DarkGray
         Write-Host ""
     }
 
@@ -469,6 +499,12 @@ function Invoke-Uninstall {
             Write-Warn "Docker container: postgres-pipely"
         }
 
+        $evoContainer = docker ps -aq -f "name=evolution-pipely" 2>$null
+        if ($evoContainer) {
+            $hasContainer = $true
+            Write-Warn "Docker container: evolution-pipely"
+        }
+
         if ($hasProdDir -or ((Test-Path "docker-compose.yml") -and (docker compose ps -q 2>$null))) {
             $hasProdContainers = $true
             Write-Warn "Production containers (app + db)"
@@ -507,13 +543,14 @@ function Invoke-Uninstall {
         }
     }
 
-    # Remove dev PostgreSQL container
+    # Remove dev containers
     if ($hasContainer) {
-        Write-Info "Removing PostgreSQL container..."
+        Write-Info "Removing containers..."
         $ErrorActionPreference = "Continue"
         docker rm -f postgres-pipely 2>$null | Out-Null
+        docker rm -f evolution-pipely 2>$null | Out-Null
         $ErrorActionPreference = "Stop"
-        Write-Ok "Container postgres-pipely removed"
+        Write-Ok "Containers removed"
     }
 
     # Remove project directory
