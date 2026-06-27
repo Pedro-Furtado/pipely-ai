@@ -314,6 +314,10 @@ export default function Pipeline() {
           )}
         </div>
         <div className="flex gap-2">
+          <Button onClick={() => setShowImport(true)} size="sm" variant="ghost">
+            <Upload size={16} />
+            Importar
+          </Button>
           <Button onClick={() => setShowCreate(true)} size="sm" variant="outline">
             <Plus size={16} />
             Novo pipeline
@@ -332,10 +336,6 @@ export default function Pipeline() {
                   <Download size={14} />
                   Exportar JSON
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setShowImport(true)}>
-                  <Upload size={14} />
-                  Importar JSON
-                </DropdownMenuItem>
                 <DropdownMenuItem destructive onClick={() => setShowDelete(true)}>
                   <Trash2 size={14} />
                   Excluir pipeline
@@ -351,12 +351,18 @@ export default function Pipeline() {
         <EmptyState
           icon={Workflow}
           title="Nenhum pipeline criado"
-          description="Crie seu primeiro pipeline para organizar o fluxo do seu time."
+          description="Crie seu primeiro pipeline ou importe um arquivo JSON."
         >
-          <Button onClick={() => setShowCreate(true)} size="sm">
-            <Plus size={16} />
-            Criar pipeline
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setShowCreate(true)} size="sm">
+              <Plus size={16} />
+              Criar pipeline
+            </Button>
+            <Button onClick={() => setShowImport(true)} size="sm" variant="outline">
+              <Upload size={16} />
+              Importar JSON
+            </Button>
+          </div>
         </EmptyState>
       ) : (
         <PipelineBoard
