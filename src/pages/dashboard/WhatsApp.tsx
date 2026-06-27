@@ -69,11 +69,13 @@ export default function WhatsApp() {
   // Delete instance
   const [deletingInstance, setDeletingInstance] = useState<EvolutionInstance | null>(null)
 
-  // QR / Status per instance
+  // QR / Status / Webhook per instance
   const [activeQr, setActiveQr] = useState<{ instanceId: string; qrcode: string } | null>(null)
   const [loadingQr, setLoadingQr] = useState<string | null>(null)
   const [statuses, setStatuses] = useState<Record<string, { state: string; name: string }>>({})
   const [checkingStatus, setCheckingStatus] = useState<string | null>(null)
+  const [webhooks, setWebhooks] = useState<Record<string, { url: string; enabled: boolean }>>({})
+  const [settingWebhook, setSettingWebhook] = useState<string | null>(null)
 
   useEffect(() => {
     loadConfig()
@@ -98,12 +100,47 @@ export default function WhatsApp() {
       const res = await whatsappService.listInstances()
       if (res.success && res.data) {
         setInstances(res.data)
-        for (const inst of res.data) checkStatus(inst.id)
+        for (const inst of res.data) {
+          checkStatus(inst.id)
+          checkWebhook(inst.id)
+        }
       }
     } catch {
       toast.error('Erro ao buscar instancias')
     } finally {
       setLoadingInstances(false)
+    }
+  }
+
+  async function checkWebhook(instanceId: string) {
+    try {
+      const res = await whatsappService.getWebhook(instanceId)
+      if (res.success && res.data) {
+        setWebhooks(prev => ({ ...prev, [instanceId]: res.data! }))
+      }
+    } catch { /* silent */ }
+  }
+
+  async function handleSetWebhook(instanceId: string) {
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    if (isLocal) {
+      toast.error('Webhook nao funciona em localhost. Use ngrok ou similar para expor a porta 3335.')
+      return
+    }
+    const webhookUrl = `${window.location.origin.replace(/:\d+$/, ':3335')}/webhook`
+    setSettingWebhook(instanceId)
+    try {
+      const res = await whatsappService.setWebhook(instanceId, webhookUrl)
+      if (res.success) {
+        toast.success('Webhook configurado')
+        checkWebhook(instanceId)
+      } else {
+        toast.error(res.message || 'Erro ao configurar webhook')
+      }
+    } catch {
+      toast.error('Erro ao configurar webhook')
+    } finally {
+      setSettingWebhook(null)
     }
   }
 
@@ -420,6 +457,51 @@ export default function WhatsApp() {
                       <Wifi size={10} className="inline mr-1" />{status.name}
                     </p>
                   )}
+
+                  {/* Webhook status */}
+                  {(() => {
+                    const wh = webhooks[inst.id]
+                    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+
+                    if (!wh || !wh.url) {
+                      return (
+                        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 space-y-1.5">
+                          <p className="text-[11px] font-medium text-amber-400">
+                            <AlertCircle size={12} className="inline mr-1" />
+                            Webhook nao configurado
+                          </p>
+                          <p className="text-[10px] text-zinc-400">
+                            O agente nao recebera respostas do WhatsApp sem o webhook.
+                          </p>
+                          {isLocal ? (
+                            <p className="text-[10px] text-zinc-500">
+                              Voce esta em localhost. Use{' '}
+                              <a href="https://ngrok.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline">ngrok</a>
+                              {' '}para expor a porta 3335:
+                              <code className="ml-1 rounded bg-zinc-800 px-1 py-0.5 text-[10px] text-zinc-300">ngrok http 3335</code>
+                            </p>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 text-[10px]"
+                              onClick={() => handleSetWebhook(inst.id)}
+                              disabled={settingWebhook === inst.id}
+                            >
+                              {settingWebhook === inst.id ? <Spinner size="sm" className="h-3 w-3" /> : 'Configurar automaticamente'}
+                            </Button>
+                          )}
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <p className="text-[10px] text-zinc-500">
+                        <CheckCircle2 size={10} className="inline mr-1 text-green-500" />
+                        Webhook: {wh.url.length > 40 ? wh.url.substring(0, 40) + '...' : wh.url}
+                      </p>
+                    )
+                  })()}
                 </CardContent>
               </Card>
             )

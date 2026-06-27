@@ -68,4 +68,14 @@ export const whatsappService = {
     const res = await api.post(`/api/whatsapp/instances/${instanceId}/disconnect`)
     return res.data
   },
+
+  async getWebhook(instanceId: string): Promise<ApiResponse & { data?: { url: string; enabled: boolean } }> {
+    const res = await api.get(`/api/whatsapp/instances/${instanceId}/webhook`)
+    return res.data
+  },
+
+  async setWebhook(instanceId: string, url: string): Promise<ApiResponse> {
+    const res = await api.post(`/api/whatsapp/instances/${instanceId}/webhook`, { url })
+    return res.data
+  },
 }

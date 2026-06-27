@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { prisma } from "../lib/prisma.js";
 import { log } from "../lib/logger.js";
+import { saveAgentLog } from "../lib/agent-log.js";
 import { TOOLS } from "../tools/definitions.js";
 import { executeTool } from "../tools/executor.js";
 import type { BlockContext, OwnerContext } from "./pipeline-scanner.js";
@@ -150,6 +151,7 @@ export async function processBlock(
             data: { taskId: task.id, blockId: noReplyBlockId },
           });
           log.info("PROCESSOR", `No-reply: task "${task.title}" moved after ${task.minutesInBlock}min`);
+          await saveAgentLog(ownerCtx.ownerId, "no_reply", `Sem resposta — "${task.title}"`, `Movida apos ${task.minutesInBlock}min sem resposta`, task.id);
         }
       }
     }
@@ -186,6 +188,7 @@ export async function processBlock(
           });
           movedIds.push(task.id);
           log.info("PROCESSOR", `Auto-advanced task "${task.title}" after ${task.minutesInBlock}min`);
+          await saveAgentLog(ownerCtx.ownerId, "auto_advance", `Auto-avanco — "${task.title}"`, `Movida apos ${task.minutesInBlock}min`, task.id);
         } else {
           waitingIds.push(task.id);
           log.info("PROCESSOR", `Task "${task.title}" waiting — ${task.minutesInBlock}/${delayMinutes}min`);
@@ -327,56 +330,81 @@ export async function processBlock(
     ];
 
     log.info("PROCESSOR", `Processing block "${block.name}" — task "${task.title}"${needsResponse ? " (1-at-a-time)" : ""}`);
+    await saveAgentLog(ownerCtx.ownerId, "processing", `Processando bloco "${block.name}"`, `Tarefa: ${task.title} | Prioridade: ${task.priority}`, task.id);
 
-    for (let step = 0; step < MAX_STEPS; step++) {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: llmMessages,
-        tools: TOOLS,
-        temperature: 0.3,
+    try {
+      for (let step = 0; step < MAX_STEPS; step++) {
+        const response = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: llmMessages,
+          tools: TOOLS,
+          temperature: 0.3,
+        });
+
+        const choice = response.choices[0];
+        if (!choice) break;
+
+        llmMessages.push(choice.message);
+
+        if (!choice.message.tool_calls || choice.message.tool_calls.length === 0) {
+          if (choice.message.content) {
+            log.info("PROCESSOR", `Agent: ${choice.message.content.substring(0, 200)}`);
+            await saveAgentLog(ownerCtx.ownerId, "agent_response", `Resumo — "${task.title}"`, choice.message.content, task.id);
+          }
+          break;
+        }
+
+        for (const toolCall of choice.message.tool_calls) {
+          const args = JSON.parse(toolCall.function.arguments);
+
+          log.info("PROCESSOR", `Tool: ${toolCall.function.name}`, args);
+
+          const result = await executeTool(
+            { name: toolCall.function.name, arguments: args },
+            {
+              ownerId: ownerCtx.ownerId,
+              evolutionUrl: ownerCtx.evolutionUrl || undefined,
+              instanceToken: ownerCtx.whatsappToken || undefined,
+            }
+          );
+
+          // Log each tool call
+          const toolResult = JSON.parse(result);
+          if (toolCall.function.name === "send_whatsapp_message") {
+            const msgs = args.messages || [args.message];
+            await saveAgentLog(ownerCtx.ownerId, toolResult.success ? "message_sent" : "message_error", toolResult.success ? `Mensagem enviada — "${task.title}"` : `Erro ao enviar mensagem — "${task.title}"`, msgs.join(" | "), task.id, args);
+          } else if (toolCall.function.name === "move_task") {
+            await saveAgentLog(ownerCtx.ownerId, toolResult.success ? "task_moved" : "move_error", toolResult.success ? `Tarefa movida — "${task.title}"` : `Erro ao mover tarefa — "${task.title}"`, args.reason || toolResult.error, task.id, args);
+          } else if (toolCall.function.name === "retry_task") {
+            await saveAgentLog(ownerCtx.ownerId, toolResult.success ? "task_retry" : "retry_error", toolResult.success ? `Retry agendado — "${task.title}"` : `Erro no retry — "${task.title}"`, `${args.retry_minutes}min — ${args.reason || ""}`, task.id, args);
+          } else if (toolCall.function.name === "update_task_status") {
+            await saveAgentLog(ownerCtx.ownerId, "status_changed", `Status → ${args.status} — "${task.title}"`, undefined, task.id, args);
+          } else if (toolCall.function.name === "create_notification") {
+            await saveAgentLog(ownerCtx.ownerId, toolResult.success ? "notification_sent" : "notification_error", toolResult.success ? `Notificacao criada — "${task.title}"` : `Erro na notificacao — "${task.title}"`, args.message, task.id, args);
+          } else {
+            await saveAgentLog(ownerCtx.ownerId, "tool_call", `${toolCall.function.name} — "${task.title}"`, JSON.stringify(args), task.id, args);
+          }
+
+          llmMessages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            content: result,
+          });
+        }
+      }
+
+      // Mark this task as processed and clear any pending retry
+      await prisma.task.update({
+        where: { id: task.id },
+        data: { processedAt: new Date(), retryAt: null },
       });
 
-      const choice = response.choices[0];
-      if (!choice) break;
-
-      llmMessages.push(choice.message);
-
-      if (!choice.message.tool_calls || choice.message.tool_calls.length === 0) {
-        if (choice.message.content) {
-          log.info("PROCESSOR", `Agent: ${choice.message.content.substring(0, 200)}`);
-        }
-        break;
-      }
-
-      for (const toolCall of choice.message.tool_calls) {
-        const args = JSON.parse(toolCall.function.arguments);
-
-        log.info("PROCESSOR", `Tool: ${toolCall.function.name}`, args);
-
-        const result = await executeTool(
-          { name: toolCall.function.name, arguments: args },
-          {
-            ownerId: ownerCtx.ownerId,
-            evolutionUrl: ownerCtx.evolutionUrl || undefined,
-            instanceToken: ownerCtx.whatsappToken || undefined,
-          }
-        );
-
-        llmMessages.push({
-          role: "tool",
-          tool_call_id: toolCall.id,
-          content: result,
-        });
-      }
+      log.info("PROCESSOR", `Marked task "${task.title}" as processed`);
+      await saveAgentLog(ownerCtx.ownerId, "task_processed", `Tarefa processada — "${task.title}"`, undefined, task.id);
+    } catch (err) {
+      log.error("PROCESSOR", `Error processing task "${task.title}"`, err);
+      await saveAgentLog(ownerCtx.ownerId, "error", `Erro ao processar — "${task.title}"`, String(err), task.id);
     }
-
-    // Mark this task as processed and clear any pending retry
-    await prisma.task.update({
-      where: { id: task.id },
-      data: { processedAt: new Date(), retryAt: null },
-    });
-
-    log.info("PROCESSOR", `Marked task "${task.title}" as processed`);
 
     // If not response-based, all tasks were sent together — break after first iteration
     if (!needsResponse) break;

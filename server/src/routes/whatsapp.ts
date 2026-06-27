@@ -294,4 +294,69 @@ router.post("/instances/:instanceId/disconnect", async (req: Request, res: Respo
   }
 });
 
+// GET /api/whatsapp/instances/:instanceId/webhook — check webhook config
+router.get("/instances/:instanceId/webhook", async (req: Request, res: Response) => {
+  try {
+    const verified = await getVerifiedInstance(req.userId, req.params.instanceId);
+    if (!verified) {
+      res.status(404).json({ success: false, message: "Instancia nao encontrada" });
+      return;
+    }
+
+    const result = await evolutionFetch(req.userId, "/webhook/find", "GET", undefined, verified.token);
+    const data = result.data as Record<string, unknown>;
+    const nested = (data?.data as Record<string, unknown>) || data;
+    const webhookUrl = (nested?.Url || nested?.url || nested?.webhook || "") as string;
+    const enabled = !!(nested?.Enabled ?? nested?.enabled ?? !!webhookUrl);
+
+    res.json({ success: true, data: { url: webhookUrl, enabled } });
+  } catch (error) {
+    if (error instanceof Error && error.message === "NO_CONFIG") {
+      res.json({ success: true, data: { url: "", enabled: false } });
+      return;
+    }
+    logger.error("WHATSAPP", "Get webhook failed", error);
+    res.status(500).json({ success: false, message: "Erro ao verificar webhook" });
+  }
+});
+
+// POST /api/whatsapp/instances/:instanceId/webhook — set webhook URL
+router.post("/instances/:instanceId/webhook", async (req: Request, res: Response) => {
+  try {
+    const verified = await getVerifiedInstance(req.userId, req.params.instanceId);
+    if (!verified) {
+      res.status(404).json({ success: false, message: "Instancia nao encontrada" });
+      return;
+    }
+
+    const { url } = req.body;
+    if (!url?.trim()) {
+      res.status(400).json({ success: false, message: "URL do webhook e obrigatoria" });
+      return;
+    }
+
+    const result = await evolutionFetch(req.userId, "/webhook/set", "POST", {
+      url: url.trim(),
+      enabled: true,
+      events: ["MESSAGES_UPSERT"],
+    }, verified.token);
+
+    const data = result.data as Record<string, unknown>;
+    if (data?.error) {
+      res.status(400).json({ success: false, message: String(data.error) });
+      return;
+    }
+
+    logger.info("WHATSAPP", "Webhook configured", { instanceId: req.params.instanceId, url: url.trim() });
+    res.json({ success: true, message: "Webhook configurado" });
+  } catch (error) {
+    if (error instanceof Error && error.message === "NO_CONFIG") {
+      res.status(400).json({ success: false, message: "Configure suas credenciais primeiro" });
+      return;
+    }
+    logger.error("WHATSAPP", "Set webhook failed", error);
+    res.status(500).json({ success: false, message: "Erro ao configurar webhook" });
+  }
+});
+
 export default router;

@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { prisma } from "../lib/prisma.js";
 import { log } from "../lib/logger.js";
+import { saveAgentLog } from "../lib/agent-log.js";
 import { TOOLS } from "../tools/definitions.js";
 import { executeTool } from "../tools/executor.js";
 
@@ -218,46 +219,65 @@ REGRAS DE COMUNICACAO (OBRIGATORIO):
     ];
 
     log.info("REPLY", `Processing reply for ${creatorTasks.length} task(s) of user ${user.name}`);
+    const activeTaskId = creatorTasks[0]?.id;
+    await saveAgentLog(creatorId, "reply_received", `Resposta recebida — ${user.name}`, `"${message}" | Tarefa: ${creatorTasks[0]?.title || "?"}`, activeTaskId);
 
-    for (let step = 0; step < MAX_STEPS; step++) {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages,
-        tools: TOOLS,
-        temperature: 0.3,
-      });
-
-      const choice = response.choices[0];
-      if (!choice) break;
-
-      messages.push(choice.message);
-
-      if (!choice.message.tool_calls || choice.message.tool_calls.length === 0) {
-        if (choice.message.content) {
-          log.info("REPLY", `Agent: ${choice.message.content.substring(0, 200)}`);
-        }
-        break;
-      }
-
-      for (const toolCall of choice.message.tool_calls) {
-        const args = JSON.parse(toolCall.function.arguments);
-        log.info("REPLY", `Tool: ${toolCall.function.name}`, args);
-
-        const result = await executeTool(
-          { name: toolCall.function.name, arguments: args },
-          {
-            ownerId: creatorId,
-            evolutionUrl: event.ownerServerUrl,
-            instanceToken: event.ownerInstanceToken,
-          }
-        );
-
-        messages.push({
-          role: "tool",
-          tool_call_id: toolCall.id,
-          content: result,
+    try {
+      for (let step = 0; step < MAX_STEPS; step++) {
+        const response = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages,
+          tools: TOOLS,
+          temperature: 0.3,
         });
+
+        const choice = response.choices[0];
+        if (!choice) break;
+
+        messages.push(choice.message);
+
+        if (!choice.message.tool_calls || choice.message.tool_calls.length === 0) {
+          if (choice.message.content) {
+            log.info("REPLY", `Agent: ${choice.message.content.substring(0, 200)}`);
+            await saveAgentLog(creatorId, "reply_processed", `Resposta processada — ${user.name}`, choice.message.content, activeTaskId);
+          }
+          break;
+        }
+
+        for (const toolCall of choice.message.tool_calls) {
+          const args = JSON.parse(toolCall.function.arguments);
+          log.info("REPLY", `Tool: ${toolCall.function.name}`, args);
+
+          const result = await executeTool(
+            { name: toolCall.function.name, arguments: args },
+            {
+              ownerId: creatorId,
+              evolutionUrl: event.ownerServerUrl,
+              instanceToken: event.ownerInstanceToken,
+            }
+          );
+
+          // Log tool calls from replies
+          const toolResult = JSON.parse(result);
+          if (toolCall.function.name === "send_whatsapp_message") {
+            const msgs = args.messages || [args.message];
+            await saveAgentLog(creatorId, toolResult.success ? "message_sent" : "message_error", toolResult.success ? `Resposta enviada — ${user.name}` : `Erro ao responder — ${user.name}`, msgs.join(" | "), activeTaskId, args);
+          } else if (toolCall.function.name === "move_task") {
+            await saveAgentLog(creatorId, toolResult.success ? "task_moved" : "move_error", toolResult.success ? `Tarefa movida — "${creatorTasks[0]?.title}"` : `Erro ao mover — "${creatorTasks[0]?.title}"`, args.reason || toolResult.error, activeTaskId, args);
+          } else if (toolCall.function.name === "retry_task") {
+            await saveAgentLog(creatorId, toolResult.success ? "task_retry" : "retry_error", toolResult.success ? `Retry agendado — "${creatorTasks[0]?.title}"` : `Erro no retry — "${creatorTasks[0]?.title}"`, `${args.retry_minutes}min`, activeTaskId, args);
+          }
+
+          messages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            content: result,
+          });
+        }
       }
+    } catch (err) {
+      log.error("REPLY", `Error processing reply from ${user.name}`, err);
+      await saveAgentLog(creatorId, "error", `Erro ao processar resposta — ${user.name}`, String(err), activeTaskId);
     }
   }
 }

@@ -13,6 +13,7 @@ import notificationRoutes from "./routes/notifications.js";
 import whatsappRoutes from "./routes/whatsapp.js";
 import taskRoutes from "./routes/tasks.js";
 import aiRoutes from "./routes/ai.js";
+import agentLogRoutes from "./routes/agent-logs.js";
 import { prisma } from "./lib/prisma.js";
 import { logger } from "./lib/logger.js";
 import { requestLogger } from "./middleware/requestLogger.js";
@@ -52,6 +53,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/ai", aiRoutes);
+app.use("/api/agent-logs", agentLogRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({ success: true, message: "Server is running" });

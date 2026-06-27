@@ -34,6 +34,7 @@ model User {
   tasksCreated  Task[] @relation("TaskCreator")
   tasksAssigned Task[] @relation("TaskAssignee")
   inviteTokens  InviteToken[]
+  agentLogs     AgentLog[] @relation("AgentLogOwner")
 }
 
 model RefreshToken {
@@ -206,6 +207,20 @@ model PipelineBlock {
   automations PipelineAutomation[]
 
   @@unique([phaseId, slug])
+}
+
+// ─── AGENT LOGS ──────────────────────────────────────────────────────────────
+
+model AgentLog {
+  id        String   @id @default(uuid())
+  ownerId   String
+  owner     User     @relation("AgentLogOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  taskId    String?
+  type      String   // message_sent, task_moved, reply_received, reply_processed, error
+  title     String
+  detail    String?
+  data      Json     @default("{}")
+  createdAt DateTime @default(now())
 }
 
 // ─── AUTOMAÇÕES ──────────────────────────────────────────────────────────────
