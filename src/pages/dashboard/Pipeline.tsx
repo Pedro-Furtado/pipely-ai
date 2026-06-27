@@ -135,6 +135,7 @@ export default function Pipeline() {
         color: p.color,
         position: p.position,
         blocks: p.blocks.map((b) => ({
+          id: b.id,
           name: b.name,
           slug: b.slug,
           blockType: b.blockType,
@@ -175,17 +176,49 @@ export default function Pipeline() {
 
       const pipelineId = pipelineRes.data.id
 
-      // Create phases and blocks
+      // Create phases and blocks, tracking old→new ID mapping
+      const blockIdMap = new Map<string, string>()
+      const blocksToUpdate: { newId: string; config: Record<string, unknown> }[] = []
+
       for (const phase of data.phases) {
         const phaseRes = await pipelineService.createPhase(pipelineId, phase.name, phase.color)
         if (!phaseRes.success || !phaseRes.data) continue
 
         for (const block of phase.blocks || []) {
           const blockRes = await pipelineService.createBlock(phaseRes.data.id, block.name, block.blockType)
-          if (blockRes.success && blockRes.data && block.config) {
-            await pipelineService.updateBlock(blockRes.data.id, { config: block.config })
+          if (blockRes.success && blockRes.data) {
+            // Map old block ID (from slug or config references) to new ID
+            if (block.slug) blockIdMap.set(block.slug, blockRes.data.id)
+            // Also map by old block id if present in config references
+            if (block.id) blockIdMap.set(block.id, blockRes.data.id)
+
+            if (block.config) {
+              blocksToUpdate.push({ newId: blockRes.data.id, config: block.config })
+            }
           }
         }
+      }
+
+      // Update configs with remapped block IDs
+      for (const { newId, config } of blocksToUpdate) {
+        const remapped = { ...config }
+
+        if (remapped.next_block_id && blockIdMap.has(remapped.next_block_id as string)) {
+          remapped.next_block_id = blockIdMap.get(remapped.next_block_id as string)
+        }
+        if (remapped.no_reply_block_id && blockIdMap.has(remapped.no_reply_block_id as string)) {
+          remapped.no_reply_block_id = blockIdMap.get(remapped.no_reply_block_id as string)
+        }
+        if (Array.isArray(remapped.branches)) {
+          remapped.branches = (remapped.branches as Array<Record<string, unknown>>).map(b => ({
+            ...b,
+            nextSlug: b.nextSlug && blockIdMap.has(b.nextSlug as string)
+              ? blockIdMap.get(b.nextSlug as string)
+              : b.nextSlug
+          }))
+        }
+
+        await pipelineService.updateBlock(newId, { config: remapped })
       }
 
       toast.success('Pipeline importado')
