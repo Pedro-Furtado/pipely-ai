@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { toast } from 'sonner'
-import { Plus, Workflow, Trash2, MoreHorizontal, Pencil, Download, Upload } from 'lucide-react'
+import { Plus, Workflow, Trash2, MoreHorizontal, Pencil, Download, Upload, LayoutTemplate, ClipboardList, FolderKanban, Inbox, PenTool } from 'lucide-react'
 import { pipelineService, type Pipeline as PipelineType } from '@/services/pipeline'
+import { pipelineTemplates, type PipelineTemplate } from '@/data/pipeline-templates'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -45,6 +46,7 @@ export default function Pipeline() {
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [showTemplates, setShowTemplates] = useState(false)
   const [importing, setImporting] = useState(false)
   const [dragOver, setDragOver] = useState(false)
 
@@ -155,6 +157,63 @@ export default function Pipeline() {
     toast.success('Pipeline exportado')
   }
 
+  async function createPipelineFromData(data: { name: string; phases: Array<Record<string, unknown>> }): Promise<boolean> {
+    const pipelineRes = await pipelineService.create(data.name)
+    if (!pipelineRes.success || !pipelineRes.data) {
+      toast.error('Erro ao criar pipeline')
+      return false
+    }
+
+    const pipelineId = pipelineRes.data.id
+    const blockIdMap = new Map<string, string>()
+    const blocksToUpdate: { newId: string; config: Record<string, unknown> }[] = []
+
+    for (const phase of data.phases) {
+      const phaseRes = await pipelineService.createPhase(pipelineId, (phase as Record<string, string>).name, (phase as Record<string, string>).color)
+      if (!phaseRes.success || !phaseRes.data) continue
+
+      for (const block of (phase.blocks as Array<Record<string, unknown>>) || []) {
+        const blockRes = await pipelineService.createBlock(phaseRes.data.id, block.name as string, block.blockType as string)
+        if (blockRes.success && blockRes.data) {
+          if (block.slug) {
+            blockIdMap.set(block.slug as string, blockRes.data.id)
+            blockIdMap.set(`__${block.slug}__`, blockRes.data.id)
+          }
+          if (block.id) blockIdMap.set(block.id as string, blockRes.data.id)
+
+          if (block.config) {
+            blocksToUpdate.push({ newId: blockRes.data.id, config: block.config as Record<string, unknown> })
+          }
+        }
+      }
+    }
+
+    for (const { newId, config } of blocksToUpdate) {
+      const remapped = { ...config }
+
+      if (remapped.next_block_id && blockIdMap.has(remapped.next_block_id as string)) {
+        remapped.next_block_id = blockIdMap.get(remapped.next_block_id as string)
+      }
+      if (remapped.no_reply_block_id && blockIdMap.has(remapped.no_reply_block_id as string)) {
+        remapped.no_reply_block_id = blockIdMap.get(remapped.no_reply_block_id as string)
+      }
+      if (Array.isArray(remapped.branches)) {
+        remapped.branches = (remapped.branches as Array<Record<string, unknown>>).map(b => ({
+          ...b,
+          nextSlug: b.nextSlug && blockIdMap.has(b.nextSlug as string)
+            ? blockIdMap.get(b.nextSlug as string)
+            : b.nextSlug
+        }))
+      }
+
+      await pipelineService.updateBlock(newId, { config: remapped })
+    }
+
+    await loadPipelines()
+    loadPipeline(pipelineId)
+    return true
+  }
+
   async function handleImportFile(file: File) {
     setImporting(true)
     try {
@@ -166,67 +225,28 @@ export default function Pipeline() {
         return
       }
 
-      // Create pipeline
-      const name = data.name || file.name.replace('.json', '')
-      const pipelineRes = await pipelineService.create(name)
-      if (!pipelineRes.success || !pipelineRes.data) {
-        toast.error('Erro ao criar pipeline')
-        return
+      const success = await createPipelineFromData(data)
+      if (success) {
+        toast.success('Pipeline importado')
+        setShowImport(false)
       }
-
-      const pipelineId = pipelineRes.data.id
-
-      // Create phases and blocks, tracking old→new ID mapping
-      const blockIdMap = new Map<string, string>()
-      const blocksToUpdate: { newId: string; config: Record<string, unknown> }[] = []
-
-      for (const phase of data.phases) {
-        const phaseRes = await pipelineService.createPhase(pipelineId, phase.name, phase.color)
-        if (!phaseRes.success || !phaseRes.data) continue
-
-        for (const block of phase.blocks || []) {
-          const blockRes = await pipelineService.createBlock(phaseRes.data.id, block.name, block.blockType)
-          if (blockRes.success && blockRes.data) {
-            // Map old block ID (from slug or config references) to new ID
-            if (block.slug) blockIdMap.set(block.slug, blockRes.data.id)
-            // Also map by old block id if present in config references
-            if (block.id) blockIdMap.set(block.id, blockRes.data.id)
-
-            if (block.config) {
-              blocksToUpdate.push({ newId: blockRes.data.id, config: block.config })
-            }
-          }
-        }
-      }
-
-      // Update configs with remapped block IDs
-      for (const { newId, config } of blocksToUpdate) {
-        const remapped = { ...config }
-
-        if (remapped.next_block_id && blockIdMap.has(remapped.next_block_id as string)) {
-          remapped.next_block_id = blockIdMap.get(remapped.next_block_id as string)
-        }
-        if (remapped.no_reply_block_id && blockIdMap.has(remapped.no_reply_block_id as string)) {
-          remapped.no_reply_block_id = blockIdMap.get(remapped.no_reply_block_id as string)
-        }
-        if (Array.isArray(remapped.branches)) {
-          remapped.branches = (remapped.branches as Array<Record<string, unknown>>).map(b => ({
-            ...b,
-            nextSlug: b.nextSlug && blockIdMap.has(b.nextSlug as string)
-              ? blockIdMap.get(b.nextSlug as string)
-              : b.nextSlug
-          }))
-        }
-
-        await pipelineService.updateBlock(newId, { config: remapped })
-      }
-
-      toast.success('Pipeline importado')
-      setShowImport(false)
-      await loadPipelines()
-      loadPipeline(pipelineId)
     } catch {
       toast.error('Erro ao importar — verifique o arquivo')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  async function handleUseTemplate(template: PipelineTemplate) {
+    setImporting(true)
+    try {
+      const success = await createPipelineFromData(template as unknown as { name: string; phases: Array<Record<string, unknown>> })
+      if (success) {
+        toast.success(`Pipeline "${template.name}" criado`)
+        setShowTemplates(false)
+      }
+    } catch {
+      toast.error('Erro ao criar pipeline do template')
     } finally {
       setImporting(false)
     }
@@ -314,6 +334,10 @@ export default function Pipeline() {
           )}
         </div>
         <div className="flex gap-2">
+          <Button onClick={() => setShowTemplates(true)} size="sm" variant="ghost">
+            <LayoutTemplate size={16} />
+            Templates
+          </Button>
           <Button onClick={() => setShowImport(true)} size="sm" variant="ghost">
             <Upload size={16} />
             Importar
@@ -351,12 +375,16 @@ export default function Pipeline() {
         <EmptyState
           icon={Workflow}
           title="Nenhum pipeline criado"
-          description="Crie seu primeiro pipeline ou importe um arquivo JSON."
+          description="Crie do zero, use um template ou importe um arquivo JSON."
         >
           <div className="flex gap-2">
             <Button onClick={() => setShowCreate(true)} size="sm">
               <Plus size={16} />
               Criar pipeline
+            </Button>
+            <Button onClick={() => setShowTemplates(true)} size="sm" variant="outline">
+              <LayoutTemplate size={16} />
+              Templates
             </Button>
             <Button onClick={() => setShowImport(true)} size="sm" variant="outline">
               <Upload size={16} />
@@ -466,6 +494,61 @@ export default function Pipeline() {
                 className="hidden"
                 onChange={handleFileInput}
               />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Templates dialog */}
+      <Dialog open={showTemplates} onOpenChange={setShowTemplates}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Templates de pipeline</DialogTitle>
+            <DialogDescription>Escolha um template para comecar rapidamente.</DialogDescription>
+          </DialogHeader>
+
+          {importing ? (
+            <div className="flex items-center justify-center py-12">
+              <Spinner size="lg" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {pipelineTemplates.map((t) => {
+                const IconMap: Record<string, typeof ClipboardList> = {
+                  'clipboard': ClipboardList,
+                  'folder-kanban': FolderKanban,
+                  'inbox': Inbox,
+                  'pen-tool': PenTool,
+                }
+                const Icon = IconMap[t.icon] || ClipboardList
+
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => handleUseTemplate(t)}
+                    className="flex flex-col gap-2 rounded-xl border border-zinc-700 p-4 text-left transition-colors hover:border-zinc-500 hover:bg-zinc-800/50"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-800">
+                        <Icon size={16} className="text-zinc-300" />
+                      </div>
+                      <span className="font-medium text-zinc-100">{t.name}</span>
+                    </div>
+                    <p className="text-xs text-zinc-400">{t.description}</p>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {t.phases.map((p) => (
+                        <span
+                          key={p.name}
+                          className="rounded-md bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400"
+                        >
+                          {p.name}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           )}
         </DialogContent>

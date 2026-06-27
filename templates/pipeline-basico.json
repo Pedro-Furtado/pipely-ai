@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "name": "Basico",
+  "description": "Pipeline simples para gestao de tarefas com acompanhamento via WhatsApp",
+  "phases": [
+    {
+      "name": "Pedidos",
+      "color": "blue",
+      "position": 0,
+      "blocks": [
+        {
+          "name": "Novo Pedido",
+          "slug": "novo_pedido",
+          "blockType": "message",
+          "config": {
+            "prompt": "Avise ao responsavel sobre a nova tarefa e pergunte se ele pode fazer agora",
+            "branches": [
+              {
+                "label": "Adiado",
+                "nextSlug": "__adiado__",
+                "condition": "Responsavel nao pode fazer agora"
+              },
+              {
+                "label": "Tarefa iniciada",
+                "nextSlug": "__tarefa_iniciada__",
+                "condition": "Responsavel pode iniciar a tarefa agora"
+              }
+            ]
+          },
+          "position": 0,
+          "isLocked": false
+        },
+        {
+          "name": "Adiado",
+          "slug": "adiado",
+          "blockType": "message",
+          "config": {
+            "delay_minutes": 60,
+            "next_block_id": "__novo_pedido__"
+          },
+          "position": 1,
+          "isLocked": false
+        }
+      ]
+    },
+    {
+      "name": "Tarefa",
+      "color": "purple",
+      "position": 1,
+      "blocks": [
+        {
+          "name": "Tarefa Iniciada",
+          "slug": "tarefa_iniciada",
+          "blockType": "message",
+          "config": {
+            "prompt": "Pergunte se a tarefa ja foi finalizada",
+            "auto_status": "in_progress",
+            "msg_delay_minutes": 120,
+            "branches": [
+              {
+                "label": "Tarefa finalizada",
+                "nextSlug": "__tarefa_finalizada__",
+                "condition": "Tarefa foi finalizada"
+              },
+              {
+                "label": "Ainda nao",
+                "nextSlug": "",
+                "condition": "Ainda nao finalizou a tarefa",
+                "retry_minutes": 60
+              }
+            ]
+          },
+          "position": 0,
+          "isLocked": false
+        },
+        {
+          "name": "Tarefa Finalizada",
+          "slug": "tarefa_finalizada",
+          "blockType": "message",
+          "config": {
+            "auto_status": "done"
+          },
+          "position": 1,
+          "isLocked": false
+        }
+      ]
+    }
+  ]
+}
