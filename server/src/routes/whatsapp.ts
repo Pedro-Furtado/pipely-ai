@@ -305,11 +305,20 @@ router.get("/instances/:instanceId/webhook", async (req: Request, res: Response)
 
     const result = await evolutionFetch(req.userId, "/webhook/find", "GET", undefined, verified.token);
     const data = result.data as Record<string, unknown>;
-    const nested = (data?.data as Record<string, unknown>) || data;
-    const webhookUrl = (nested?.Url || nested?.url || nested?.webhook || "") as string;
-    const enabled = !!(nested?.Enabled ?? nested?.enabled ?? !!webhookUrl);
+    logger.info("WHATSAPP", "Webhook find response", { data: JSON.stringify(data).substring(0, 500) });
 
-    res.json({ success: true, data: { url: webhookUrl, enabled } });
+    // Evolution Go may nest data differently
+    const nested = (data?.data as Record<string, unknown>) || data;
+    // Try multiple field names — Evolution Go varies between versions
+    const webhookUrl = (
+      nested?.Url || nested?.url || nested?.webhook ||
+      nested?.webhookUrl || nested?.webhook_url ||
+      (nested?.webhook as Record<string, unknown>)?.url ||
+      ""
+    ) as string;
+    const enabled = !!(nested?.Enabled ?? nested?.enabled ?? nested?.active ?? !!webhookUrl);
+
+    res.json({ success: true, data: { url: webhookUrl, enabled, raw: nested } });
   } catch (error) {
     if (error instanceof Error && error.message === "NO_CONFIG") {
       res.json({ success: true, data: { url: "", enabled: false } });
