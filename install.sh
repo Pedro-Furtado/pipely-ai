@@ -458,7 +458,7 @@ install_local() {
         -e LOGTYPE="text" \
         -e WA_DEBUG="false" \
         -p "$EVOLUTION_PORT":8080 \
-        -d ghcr.io/evolutionapi/evolution-go:latest >/dev/null
+        -d evoapicloud/evolution-go:latest >/dev/null
       success "Evolution Go container created (port $EVOLUTION_PORT)"
     fi
   else
@@ -502,10 +502,12 @@ show_local_summary() {
   header "Ready!"
 
   printf "  ${BOLD}Services:${RESET}\n"
-  printf "  ${GREEN}Frontend${RESET}   http://localhost:5173\n"
-  printf "  ${GREEN}Backend${RESET}    http://localhost:3333\n"
-  printf "  ${GREEN}Agent${RESET}      http://localhost:3335\n"
-  printf "  ${GREEN}Database${RESET}   localhost:5433\n"
+  printf "  ${GREEN}Frontend${RESET}      http://localhost:5173\n"
+  printf "  ${GREEN}Backend${RESET}       http://localhost:3333\n"
+  printf "  ${GREEN}Agent${RESET}         http://localhost:3335\n"
+  printf "  ${GREEN}Evolution Go${RESET}  http://localhost:8080\n"
+  printf "  ${GREEN}Manager${RESET}       http://localhost:8080/manager\n"
+  printf "  ${GREEN}Database${RESET}      localhost:5433\n"
   echo ""
   printf "  ${BOLD}Start development:${RESET}\n"
   echo ""

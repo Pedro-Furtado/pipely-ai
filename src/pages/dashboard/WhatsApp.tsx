@@ -347,18 +347,16 @@ export default function WhatsApp() {
             <Plus size={14} />
             Nova instancia
           </Button>
+          <a href={`${config.serverUrl}/manager`} target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" size="sm">
+              <ExternalLink size={14} />
+              Manager
+            </Button>
+          </a>
           {!isBundled && (
-            <>
-              <a href={`${config.serverUrl}/manager`} target="_blank" rel="noopener noreferrer">
-                <Button variant="outline" size="sm">
-                  <ExternalLink size={14} />
-                  Manager
-                </Button>
-              </a>
-              <Button variant="outline" size="sm" onClick={openEditConfig} className="text-zinc-400">
-                <Settings size={14} />
-              </Button>
-            </>
+            <Button variant="outline" size="sm" onClick={openEditConfig} className="text-zinc-400">
+              <Settings size={14} />
+            </Button>
           )}
         </div>
       </div>

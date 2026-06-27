@@ -399,7 +399,7 @@ function Install-Local {
                 -e "LOGTYPE=text" `
                 -e "WA_DEBUG=false" `
                 -p "${evoPort}:8080" `
-                -d ghcr.io/evolutionapi/evolution-go:latest 2>&1 | Out-Null
+                -d evoapicloud/evolution-go:latest 2>&1 | Out-Null
             $ErrorActionPreference = "Stop"
             Write-Ok "Evolution Go container created (port $evoPort)"
         }
@@ -427,10 +427,12 @@ function Install-Local {
     Write-Header "Ready!"
 
     Write-Host "  Services:" -ForegroundColor White
-    Write-Host "  Frontend   " -NoNewline; Write-Host "http://localhost:5173" -ForegroundColor Green
-    Write-Host "  Backend    " -NoNewline; Write-Host "http://localhost:3333" -ForegroundColor Green
-    Write-Host "  Agent      " -NoNewline; Write-Host "http://localhost:3335" -ForegroundColor Green
-    Write-Host "  Database   " -NoNewline; Write-Host "localhost:5433" -ForegroundColor Green
+    Write-Host "  Frontend      " -NoNewline; Write-Host "http://localhost:5173" -ForegroundColor Green
+    Write-Host "  Backend       " -NoNewline; Write-Host "http://localhost:3333" -ForegroundColor Green
+    Write-Host "  Agent         " -NoNewline; Write-Host "http://localhost:3335" -ForegroundColor Green
+    Write-Host "  Evolution Go  " -NoNewline; Write-Host "http://localhost:8080" -ForegroundColor Green
+    Write-Host "  Manager       " -NoNewline; Write-Host "http://localhost:8080/manager" -ForegroundColor Green
+    Write-Host "  Database      " -NoNewline; Write-Host "localhost:5433" -ForegroundColor Green
     Write-Host ""
     Write-Host "  Start development:" -ForegroundColor White
     Write-Host ""
