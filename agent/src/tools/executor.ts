@@ -27,7 +27,7 @@ export async function executeTool(
       // Support both single message and array of messages
       const messages: string[] = args.messages || [args.message];
       let allSent = true;
-      for (const msg of messages.slice(0, 4)) {
+      for (const msg of messages.slice(0, 15)) {
         const sent = await sendWhatsAppMessage(
           args.remote_jid,
           msg,
