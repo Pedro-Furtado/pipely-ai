@@ -40,8 +40,14 @@ Pipely AI automates task management through visual pipelines connected to WhatsA
 
 One command to install. Works on **VPS (production)** and **local machine (development)**.
 
+**Linux / macOS:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.ps1 | iex
 ```
 
 The installer will ask you to choose:
@@ -54,18 +60,26 @@ The installer will ask you to choose:
 You can also skip the prompt:
 
 ```bash
-# Production directly
-curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.sh | sh -s -- --prod
+# Linux / macOS — production
+curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.sh | bash -s -- --prod
 
-# Local development directly
-curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.sh | sh -s -- --local
+# Linux / macOS — local development
+curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.sh | bash -s -- --local
+```
+
+```powershell
+# Windows — production
+irm https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.ps1 | iex -- --prod
+
+# Windows — local development
+irm https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.ps1 | iex -- --local
 ```
 
 ### What the installer checks
 
 | Dependency | Production | Local Dev |
 |------------|-----------|-----------|
-| Docker | Required (auto-installs) | Optional (for PostgreSQL) |
+| Docker | Required (auto-installs on Linux) | Optional (for PostgreSQL) |
 | Node.js 18+ | — | Required |
 | Git | — | Required (to clone repo) |
 
@@ -266,8 +280,14 @@ cat .env
 
 The fastest way:
 
+**Linux / macOS:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.sh | sh -s -- --local
+curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.sh | bash -s -- --local
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.ps1 | iex -- --local
 ```
 
 Or manually:
