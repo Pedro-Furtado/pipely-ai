@@ -141,7 +141,7 @@ router.get("/instances", async (req: Request, res: Response) => {
 // POST /api/whatsapp/instances — create instance
 router.post("/instances", async (req: Request, res: Response) => {
   try {
-    const { name, token } = req.body;
+    const { name, token, webhookUrl } = req.body;
 
     if (!name?.trim()) {
       res.status(400).json({ success: false, message: "Nome da instancia e obrigatorio" });
@@ -151,10 +151,19 @@ router.post("/instances", async (req: Request, res: Response) => {
     const crypto = await import("crypto");
     const instanceToken = token?.trim() || crypto.randomBytes(24).toString("hex");
 
-    const result = await evolutionFetch(req.userId, "/instance/create", "POST", {
+    const createBody: Record<string, unknown> = {
       name: name.trim(),
       token: instanceToken,
-    });
+    };
+
+    // Include webhook in advanced settings if provided
+    if (webhookUrl?.trim()) {
+      createBody.advancedSettings = {
+        webhookUrl: webhookUrl.trim(),
+      };
+    }
+
+    const result = await evolutionFetch(req.userId, "/instance/create", "POST", createBody);
 
     const data = result.data as Record<string, unknown>;
 

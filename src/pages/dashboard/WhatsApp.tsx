@@ -207,13 +207,20 @@ export default function WhatsApp() {
     setShowConfig(true)
   }
 
+  function getWebhookUrl(): string | undefined {
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    if (isLocal) return undefined
+    // In production, agent webhook runs on port 3335 or same origin
+    return `${window.location.origin.replace(/:\d+$/, ':3335')}/webhook`
+  }
+
   async function handleCreateInstance(e: FormEvent) {
     e.preventDefault()
     if (!newInstanceName.trim()) return
 
     setCreating(true)
     try {
-      const res = await whatsappService.createInstance(newInstanceName.trim())
+      const res = await whatsappService.createInstance(newInstanceName.trim(), getWebhookUrl())
       if (res.success) {
         toast.success('Instancia criada')
         setShowCreate(false)

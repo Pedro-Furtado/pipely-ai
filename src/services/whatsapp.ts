@@ -39,8 +39,8 @@ export const whatsappService = {
     return res.data
   },
 
-  async createInstance(name: string): Promise<ApiResponse & { data?: EvolutionInstance }> {
-    const res = await api.post('/api/whatsapp/instances', { name })
+  async createInstance(name: string, webhookUrl?: string): Promise<ApiResponse & { data?: EvolutionInstance }> {
+    const res = await api.post('/api/whatsapp/instances', { name, webhookUrl })
     return res.data
   },
 
