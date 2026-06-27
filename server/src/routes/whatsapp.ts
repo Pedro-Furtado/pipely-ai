@@ -303,75 +303,36 @@ router.post("/instances/:instanceId/disconnect", async (req: Request, res: Respo
   }
 });
 
-// GET /api/whatsapp/instances/:instanceId/webhook — check webhook config
-router.get("/instances/:instanceId/webhook", async (req: Request, res: Response) => {
+// GET /api/whatsapp/webhook — check webhook config (stored locally)
+router.get("/webhook", async (req: Request, res: Response) => {
   try {
-    const verified = await getVerifiedInstance(req.userId, req.params.instanceId);
-    if (!verified) {
-      res.status(404).json({ success: false, message: "Instancia nao encontrada" });
-      return;
-    }
-
-    const result = await evolutionFetch(req.userId, `/instance/get/${req.params.instanceId}`, "GET", undefined, verified.token);
-    const data = result.data as Record<string, unknown>;
-    logger.info("WHATSAPP", "Instance get response", { data: JSON.stringify(data).substring(0, 1000) });
-
-    const nested = (data?.data as Record<string, unknown>) || data;
-    // Try multiple field names for webhook URL
-    const webhookUrl = (
-      nested?.webhookUrl || nested?.webhook_url || nested?.WebhookUrl ||
-      nested?.Url || nested?.url || nested?.webhook ||
-      (nested?.webhook as Record<string, unknown>)?.url ||
-      ""
-    ) as string;
-    const enabled = !!(nested?.Enabled ?? nested?.enabled ?? nested?.active ?? !!webhookUrl);
-
-    res.json({ success: true, data: { url: webhookUrl, enabled } });
+    const config = await prisma.whatsAppConfig.findUnique({ where: { userId: req.userId } });
+    res.json({ success: true, data: { url: config?.webhookUrl || "", enabled: !!config?.webhookUrl } });
   } catch (error) {
-    if (error instanceof Error && error.message === "NO_CONFIG") {
-      res.json({ success: true, data: { url: "", enabled: false } });
-      return;
-    }
     logger.error("WHATSAPP", "Get webhook failed", error);
-    res.status(500).json({ success: false, message: "Erro ao verificar webhook" });
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
 
-// POST /api/whatsapp/instances/:instanceId/webhook — set webhook URL
-router.post("/instances/:instanceId/webhook", async (req: Request, res: Response) => {
+// POST /api/whatsapp/webhook — save webhook URL (stored locally)
+router.post("/webhook", async (req: Request, res: Response) => {
   try {
-    const verified = await getVerifiedInstance(req.userId, req.params.instanceId);
-    if (!verified) {
-      res.status(404).json({ success: false, message: "Instancia nao encontrada" });
-      return;
-    }
-
     const { url } = req.body;
     if (!url?.trim()) {
       res.status(400).json({ success: false, message: "URL do webhook e obrigatoria" });
       return;
     }
 
-    // Use advanced-settings to set webhook URL
-    const result = await evolutionFetch(req.userId, `/instance/${req.params.instanceId}/advanced-settings`, "PUT", {
-      webhookUrl: url.trim(),
-    }, verified.token);
+    await prisma.whatsAppConfig.update({
+      where: { userId: req.userId },
+      data: { webhookUrl: url.trim() },
+    });
 
-    const data = result.data as Record<string, unknown>;
-    if (data?.error) {
-      res.status(400).json({ success: false, message: String(data.error) });
-      return;
-    }
-
-    logger.info("WHATSAPP", "Webhook configured", { instanceId: req.params.instanceId, url: url.trim() });
-    res.json({ success: true, message: "Webhook configurado" });
+    logger.info("WHATSAPP", "Webhook URL saved", { url: url.trim() });
+    res.json({ success: true, message: "Webhook salvo" });
   } catch (error) {
-    if (error instanceof Error && error.message === "NO_CONFIG") {
-      res.status(400).json({ success: false, message: "Configure suas credenciais primeiro" });
-      return;
-    }
     logger.error("WHATSAPP", "Set webhook failed", error);
-    res.status(500).json({ success: false, message: "Erro ao configurar webhook" });
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
 

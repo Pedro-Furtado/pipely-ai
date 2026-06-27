@@ -96,6 +96,7 @@ model WhatsAppConfig {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   serverUrl    String
   globalApiKey String
+  webhookUrl   String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
