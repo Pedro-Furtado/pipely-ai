@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -16,14 +16,16 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import NavUser from '@/components/layout/NavUser'
+import { whatsappService } from '@/services/whatsapp'
+import { aiService } from '@/services/ai'
 
 const ownerNavItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
   { label: 'Pipeline', icon: Workflow, path: '/pipeline' },
   { label: 'Time', icon: Users, path: '/time' },
   { label: 'Tarefas', icon: ClipboardList, path: '/tarefas' },
-  { label: 'Assistente de IA', icon: Bot, path: '/assistente' },
-  { label: 'WhatsApp', icon: MessageCircle, path: '/whatsapp' },
+  { label: 'Assistente de IA', icon: Bot, path: '/assistente', configKey: 'ai' as const },
+  { label: 'WhatsApp', icon: MessageCircle, path: '/whatsapp', configKey: 'whatsapp' as const },
 ]
 
 const memberNavItems = [
@@ -35,6 +37,24 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === 'true')
   const { isOwner } = useWorkspace()
   const navItems = isOwner ? ownerNavItems : memberNavItems
+  const [configStatus, setConfigStatus] = useState<{ whatsapp: boolean; ai: boolean }>({ whatsapp: true, ai: true })
+
+  useEffect(() => {
+    if (!isOwner) return
+    async function checkConfigs() {
+      try {
+        const [wpRes, aiRes] = await Promise.all([
+          whatsappService.getConfig(),
+          aiService.getConfig(),
+        ])
+        setConfigStatus({
+          whatsapp: !!(wpRes.data?.serverUrl),
+          ai: !!(aiRes.data?.hasKey),
+        })
+      } catch { /* silent */ }
+    }
+    checkConfigs()
+  }, [isOwner])
 
   return (
     <aside
@@ -63,30 +83,51 @@ export default function Sidebar() {
       {/* Navigation */}
       <TooltipProvider>
         <nav className="flex-1 space-y-1 p-2">
-          {navItems.map((item) => (
-            <Tooltip key={item.path}>
-              <TooltipTrigger asChild>
-                <div>
-                  <NavLink
-                    to={item.path}
-                    className={({ isActive }) =>
-                      cn(
-                        'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                        isActive
-                          ? 'bg-zinc-800 text-zinc-50'
-                          : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-50',
-                        collapsed && 'justify-center px-0'
-                      )
-                    }
-                  >
-                    <item.icon size={18} className="shrink-0" />
-                    {!collapsed && <span>{item.label}</span>}
-                  </NavLink>
-                </div>
-              </TooltipTrigger>
-              {collapsed && <TooltipContent>{item.label}</TooltipContent>}
-            </Tooltip>
-          ))}
+          {navItems.map((item) => {
+            const needsConfig = 'configKey' in item && item.configKey && !configStatus[item.configKey]
+            return (
+              <Tooltip key={item.path}>
+                <TooltipTrigger asChild>
+                  <div>
+                    <NavLink
+                      to={item.path}
+                      className={({ isActive }) =>
+                        cn(
+                          'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                          isActive
+                            ? 'bg-zinc-800 text-zinc-50'
+                            : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-50',
+                          collapsed && 'justify-center px-0'
+                        )
+                      }
+                    >
+                      <div className="relative shrink-0">
+                        <item.icon size={18} />
+                        {needsConfig && (
+                          <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-amber-500" />
+                        )}
+                      </div>
+                      {!collapsed && (
+                        <>
+                          <span className="flex-1">{item.label}</span>
+                          {needsConfig && (
+                            <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-500">
+                              Configurar
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </NavLink>
+                  </div>
+                </TooltipTrigger>
+                {collapsed && (
+                  <TooltipContent>
+                    {item.label}{needsConfig ? ' (nao configurado)' : ''}
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            )
+          })}
         </nav>
       </TooltipProvider>
 
