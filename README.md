@@ -308,8 +308,7 @@ cp .env.example .env && cp server/.env.example server/.env && cp agent/.env.exam
 cd server && npm run db:push && npm run db:generate && cd ..
 
 # Run
-npm run dev:all          # Frontend + Backend
-cd agent && npm run dev  # Agent (separate terminal)
+npm run dev:all          # Frontend + Backend + Agent
 ```
 
 | Service | Port |

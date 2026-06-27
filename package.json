@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "dev:server": "cd server && npm run dev",
-    "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
+    "dev:agent": "cd agent && npm run dev",
+    "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\" \"npm run dev:agent\"",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"

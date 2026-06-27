@@ -483,8 +483,7 @@ show_local_summary() {
   if [ "$PROJECT_DIR" != "." ]; then
     printf "  ${DIM}cd $PROJECT_DIR${RESET}\n"
   fi
-  printf "  ${CYAN}npm run dev:all${RESET}          ${DIM}# Frontend + Backend${RESET}\n"
-  printf "  ${CYAN}cd agent && npm run dev${RESET}  ${DIM}# Agent (separate terminal)${RESET}\n"
+  printf "  ${CYAN}npm run dev:all${RESET}          ${DIM}# Frontend + Backend + Agent${RESET}\n"
   echo ""
   printf "  ${BOLD}Useful commands:${RESET}\n"
   printf "  ${DIM}npm run dev              # Frontend only${RESET}\n"

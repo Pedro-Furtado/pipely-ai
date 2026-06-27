@@ -408,9 +408,7 @@ function Install-Local {
         Write-Host "  cd $projectDir" -ForegroundColor DarkGray
     }
     Write-Host "  npm run dev:all" -NoNewline -ForegroundColor Cyan
-    Write-Host "          # Frontend + Backend" -ForegroundColor DarkGray
-    Write-Host "  cd agent; npm run dev" -NoNewline -ForegroundColor Cyan
-    Write-Host "  # Agent (separate terminal)" -ForegroundColor DarkGray
+    Write-Host "          # Frontend + Backend + Agent" -ForegroundColor DarkGray
     Write-Host ""
     Write-Host "  Useful commands:" -ForegroundColor White
     Write-Host "  npm run dev              # Frontend only" -ForegroundColor DarkGray
