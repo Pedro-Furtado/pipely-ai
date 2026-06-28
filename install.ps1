@@ -336,6 +336,27 @@ function Install-Local {
     # ── Step 4: Configure environment ─────────────────────────────────────────
     Write-Step 4 $totalSteps "Configuring environment"
 
+    $dbUser = "pipely"
+    $dbPass = "pipely123"
+    $dbName = "pipely_ai"
+    $containerName = "postgres-pipely"
+    $evoContainer = "evolution-pipely"
+    $evoKey = "pipely-dev-key"
+
+    # Find free ports
+    function Find-FreePort($default) {
+        for ($p = $default; $p -lt ($default + 20); $p++) {
+            $used = Get-NetTCPConnection -LocalPort $p -ErrorAction SilentlyContinue
+            if (-not $used) { return $p }
+        }
+        return $default
+    }
+
+    $dbPort = Find-FreePort 5433
+    $evoPort = Find-FreePort 8080
+    if ($dbPort -ne 5433) { Write-Warn "Port 5433 in use, using $dbPort for PostgreSQL" }
+    if ($evoPort -ne 8080) { Write-Warn "Port 8080 in use, using $evoPort for Evolution Go" }
+
     # Generate .env files with correct ports (skip if already exist)
     if (-not (Test-Path ".env")) {
         "VITE_API_URL=http://localhost:3333" | Set-Content ".env" -Encoding UTF8
@@ -364,27 +385,6 @@ POLL_INTERVAL_MS=60000
 
     # ── Step 5: Database + Evolution Go ────────────────────────────────────────
     Write-Step 5 $totalSteps "Database + Evolution Go"
-
-    $dbUser = "pipely"
-    $dbPass = "pipely123"
-    $dbName = "pipely_ai"
-    $containerName = "postgres-pipely"
-    $evoContainer = "evolution-pipely"
-    $evoKey = "pipely-dev-key"
-
-    # Find free ports
-    function Find-FreePort($default) {
-        for ($p = $default; $p -lt ($default + 20); $p++) {
-            $used = Get-NetTCPConnection -LocalPort $p -ErrorAction SilentlyContinue
-            if (-not $used) { return $p }
-        }
-        return $default
-    }
-
-    $dbPort = Find-FreePort 5433
-    $evoPort = Find-FreePort 8080
-    if ($dbPort -ne 5433) { Write-Warn "Port 5433 in use, using $dbPort for PostgreSQL" }
-    if ($evoPort -ne 8080) { Write-Warn "Port 8080 in use, using $evoPort for Evolution Go" }
 
     if ($hasDocker) {
         # PostgreSQL
