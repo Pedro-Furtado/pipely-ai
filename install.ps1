@@ -380,6 +380,11 @@ function Install-Local {
             }
         }
 
+        # Create Evolution Go database
+        $ErrorActionPreference = "Continue"
+        docker exec $containerName psql -U $dbUser -d $dbName -c "CREATE DATABASE evolution_go;" 2>$null | Out-Null
+        $ErrorActionPreference = "Stop"
+
         # Evolution Go
         $evoRunning = docker ps -q -f "name=$evoContainer" 2>$null
         $evoExists = docker ps -aq -f "name=$evoContainer" 2>$null
@@ -398,8 +403,8 @@ function Install-Local {
                 -e "CLIENT_NAME=pipely" `
                 -e "SERVER_PORT=8080" `
                 -e "DATABASE_SAVE_MESSAGES=true" `
-                -e "POSTGRES_AUTH_DB=postgresql://${dbUser}:${dbPass}@host.docker.internal:${dbPort}/${dbName}?sslmode=disable" `
-                -e "POSTGRES_USERS_DB=postgresql://${dbUser}:${dbPass}@host.docker.internal:${dbPort}/${dbName}?sslmode=disable" `
+                -e "POSTGRES_AUTH_DB=postgresql://${dbUser}:${dbPass}@host.docker.internal:${dbPort}/evolution_go?sslmode=disable" `
+                -e "POSTGRES_USERS_DB=postgresql://${dbUser}:${dbPass}@host.docker.internal:${dbPort}/evolution_go?sslmode=disable" `
                 -e "LOGTYPE=text" `
                 -e "WA_DEBUG=false" `
                 -p "${evoPort}:8080" `
