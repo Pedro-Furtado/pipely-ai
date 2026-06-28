@@ -443,6 +443,9 @@ function Install-Local {
     Write-Host "  Manager       " -NoNewline; Write-Host "http://localhost:8080/manager" -ForegroundColor Green
     Write-Host "  Database      " -NoNewline; Write-Host "localhost:5433" -ForegroundColor Green
     Write-Host ""
+    Write-Host "  Evolution Go API Key: " -NoNewline -ForegroundColor White; Write-Host "$evoKey" -ForegroundColor Yellow
+    Write-Host "  (use to login at Manager)" -ForegroundColor DarkGray
+    Write-Host ""
     Write-Host "  Start development:" -ForegroundColor White
     Write-Host ""
     if ($projectDir -ne ".") {

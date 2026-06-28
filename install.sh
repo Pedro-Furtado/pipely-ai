@@ -515,6 +515,9 @@ show_local_summary() {
   printf "  ${GREEN}Manager${RESET}       http://localhost:8080/manager\n"
   printf "  ${GREEN}Database${RESET}      localhost:5433\n"
   echo ""
+  printf "  ${BOLD}Evolution Go API Key:${RESET} ${YELLOW}${EVOLUTION_KEY}${RESET}\n"
+  printf "  ${DIM}(use to login at Manager)${RESET}\n"
+  echo ""
   printf "  ${BOLD}Start development:${RESET}\n"
   echo ""
   if [ "$PROJECT_DIR" != "." ]; then
