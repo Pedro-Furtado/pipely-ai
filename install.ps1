@@ -373,7 +373,11 @@ function Install-Local {
                 -d postgres:17 | Out-Null
             Write-Ok "PostgreSQL container created (port $dbPort)"
             Write-Info "Waiting for database to be ready..."
-            Start-Sleep -Seconds 3
+            for ($i = 0; $i -lt 30; $i++) {
+                $ready = docker exec $containerName pg_isready -U $dbUser 2>$null
+                if ($ready -match "accepting") { break }
+                Start-Sleep -Seconds 1
+            }
         }
 
         # Evolution Go
