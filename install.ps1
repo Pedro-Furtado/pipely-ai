@@ -336,21 +336,55 @@ function Install-Local {
     # ── Step 4: Configure environment ─────────────────────────────────────────
     Write-Step 4 $totalSteps "Configuring environment"
 
-    Copy-EnvIfNeeded ".env.example" ".env" "Root .env"
-    Copy-EnvIfNeeded "server/.env.example" "server/.env" "Server .env"
-    Copy-EnvIfNeeded "agent/.env.example" "agent/.env" "Agent .env"
+    # Generate .env files with correct ports (skip if already exist)
+    if (-not (Test-Path ".env")) {
+        "VITE_API_URL=http://localhost:3333" | Set-Content ".env" -Encoding UTF8
+        Write-Ok "Root .env"
+    } else { Write-Ok "Root .env (already exists)" }
+
+    if (-not (Test-Path "server/.env")) {
+        @"
+DATABASE_URL=postgresql://pipely:pipely123@localhost:${dbPort}/pipely_ai
+JWT_SECRET=change-me-to-a-random-secret
+FRONTEND_URL=http://localhost:5173
+BACKEND_URL=http://localhost:3333
+EVOLUTION_SERVER_URL=http://localhost:${evoPort}
+EVOLUTION_API_KEY=${evoKey}
+"@ | Set-Content "server/.env" -Encoding UTF8
+        Write-Ok "Server .env (port $dbPort, evo $evoPort)"
+    } else { Write-Ok "Server .env (already exists)" }
+
+    if (-not (Test-Path "agent/.env")) {
+        @"
+DATABASE_URL=postgresql://pipely:pipely123@localhost:${dbPort}/pipely_ai
+POLL_INTERVAL_MS=60000
+"@ | Set-Content "agent/.env" -Encoding UTF8
+        Write-Ok "Agent .env"
+    } else { Write-Ok "Agent .env (already exists)" }
 
     # ── Step 5: Database + Evolution Go ────────────────────────────────────────
     Write-Step 5 $totalSteps "Database + Evolution Go"
 
     $dbUser = "pipely"
     $dbPass = "pipely123"
-    $dbPort = "5433"
     $dbName = "pipely_ai"
     $containerName = "postgres-pipely"
     $evoContainer = "evolution-pipely"
-    $evoPort = "8080"
     $evoKey = "pipely-dev-key"
+
+    # Find free ports
+    function Find-FreePort($default) {
+        for ($p = $default; $p -lt ($default + 20); $p++) {
+            $used = Get-NetTCPConnection -LocalPort $p -ErrorAction SilentlyContinue
+            if (-not $used) { return $p }
+        }
+        return $default
+    }
+
+    $dbPort = Find-FreePort 5433
+    $evoPort = Find-FreePort 8080
+    if ($dbPort -ne 5433) { Write-Warn "Port 5433 in use, using $dbPort for PostgreSQL" }
+    if ($evoPort -ne 8080) { Write-Warn "Port 8080 in use, using $evoPort for Evolution Go" }
 
     if ($hasDocker) {
         # PostgreSQL
@@ -365,12 +399,18 @@ function Install-Local {
             Write-Ok "PostgreSQL container started"
         } else {
             Write-Info "Creating PostgreSQL container..."
-            docker run --name $containerName `
+            $ErrorActionPreference = "Continue"
+            $pgResult = docker run --name $containerName `
                 -e "POSTGRES_USER=$dbUser" `
                 -e "POSTGRES_PASSWORD=$dbPass" `
                 -e "POSTGRES_DB=$dbName" `
                 -p "${dbPort}:5432" `
-                -d postgres:17 | Out-Null
+                -d postgres:17 2>&1
+            $ErrorActionPreference = "Stop"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Fail "PostgreSQL container failed: $pgResult"
+                exit 1
+            }
             Write-Ok "PostgreSQL container created (port $dbPort)"
             Write-Info "Waiting for database to be ready..."
             for ($i = 0; $i -lt 30; $i++) {
@@ -408,9 +448,13 @@ function Install-Local {
                 -e "LOGTYPE=text" `
                 -e "WA_DEBUG=false" `
                 -p "${evoPort}:8080" `
-                -d evoapicloud/evolution-go:latest 2>&1 | Out-Null
+                -d evoapicloud/evolution-go:latest 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Fail "Evolution Go container failed"
+            } else {
+                Write-Ok "Evolution Go container created (port $evoPort)"
+            }
             $ErrorActionPreference = "Stop"
-            Write-Ok "Evolution Go container created (port $evoPort)"
         }
     } else {
         Write-Warn "Docker not found — set up PostgreSQL and Evolution Go manually"
@@ -422,15 +466,23 @@ function Install-Local {
 
     Write-Info "Syncing database schema..."
     $ErrorActionPreference = "Continue"
-    Push-Location server; npm run db:push 2>&1 | Out-Null; Pop-Location
-    $ErrorActionPreference = "Stop"
-    Write-Ok "Schema synced"
+    $pushResult = Push-Location server; npm run db:push 2>&1; Pop-Location
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "Schema sync failed"
+        $pushResult | Select-Object -Last 3 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    } else {
+        Write-Ok "Schema synced"
+    }
 
     Write-Info "Generating Prisma client..."
-    $ErrorActionPreference = "Continue"
-    Push-Location server; npm run db:generate 2>&1 | Out-Null; Pop-Location
+    $genResult = Push-Location server; npm run db:generate 2>&1; Pop-Location
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "Prisma generate failed"
+        $genResult | Select-Object -Last 3 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    } else {
+        Write-Ok "Prisma client generated"
+    }
     $ErrorActionPreference = "Stop"
-    Write-Ok "Prisma client generated"
 
     # ── Done ──────────────────────────────────────────────────────────────────
     Write-Header "Ready!"
@@ -439,9 +491,9 @@ function Install-Local {
     Write-Host "  Frontend      " -NoNewline; Write-Host "http://localhost:5173" -ForegroundColor Green
     Write-Host "  Backend       " -NoNewline; Write-Host "http://localhost:3333" -ForegroundColor Green
     Write-Host "  Agent         " -NoNewline; Write-Host "http://localhost:3335" -ForegroundColor Green
-    Write-Host "  Evolution Go  " -NoNewline; Write-Host "http://localhost:8080" -ForegroundColor Green
-    Write-Host "  Manager       " -NoNewline; Write-Host "http://localhost:8080/manager" -ForegroundColor Green
-    Write-Host "  Database      " -NoNewline; Write-Host "localhost:5433" -ForegroundColor Green
+    Write-Host "  Evolution Go  " -NoNewline; Write-Host "http://localhost:${evoPort}" -ForegroundColor Green
+    Write-Host "  Manager       " -NoNewline; Write-Host "http://localhost:${evoPort}/manager" -ForegroundColor Green
+    Write-Host "  Database      " -NoNewline; Write-Host "localhost:${dbPort}" -ForegroundColor Green
     Write-Host ""
     Write-Host "  Evolution Go API Key: " -NoNewline -ForegroundColor White; Write-Host "$evoKey" -ForegroundColor Yellow
     Write-Host "  (use to login at Manager)" -ForegroundColor DarkGray

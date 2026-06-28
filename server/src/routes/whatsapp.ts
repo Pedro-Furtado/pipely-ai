@@ -291,7 +291,33 @@ router.post("/instances/:instanceId/connect", async (req: Request, res: Response
       return;
     }
 
-    const result = await evolutionFetch(req.userId, "/instance/connect", "POST", undefined, verified.token);
+    // Build connect body with webhook config
+    const connectBody: Record<string, unknown> = { immediate: true };
+
+    // Auto-detect webhook URL
+    const config = await prisma.whatsAppConfig.findUnique({ where: { userId: req.userId } });
+    const webhookUrl = config?.webhookUrl || req.body?.webhookUrl || "";
+
+    // Bundled mode — use internal agent URL
+    if (!webhookUrl && process.env.EVOLUTION_SERVER_URL) {
+      connectBody.webhookUrl = "http://app:3335/webhook";
+      connectBody.subscribe = ["MESSAGE"];
+    } else if (webhookUrl) {
+      connectBody.webhookUrl = webhookUrl;
+      connectBody.subscribe = ["MESSAGE"];
+    }
+
+    const result = await evolutionFetch(req.userId, "/instance/connect", "POST", connectBody, verified.token);
+
+    // Save webhook URL if configured
+    if (connectBody.webhookUrl && config) {
+      await prisma.whatsAppConfig.update({
+        where: { userId: req.userId },
+        data: { webhookUrl: String(connectBody.webhookUrl) },
+      }).catch(() => {});
+    }
+
+    logger.info("WHATSAPP", "Instance connected", { webhook: connectBody.webhookUrl || "none", events: connectBody.subscribe || [] });
     res.json({ success: true, data: result.data });
   } catch (error) {
     if (error instanceof Error && error.message === "NO_CONFIG") {

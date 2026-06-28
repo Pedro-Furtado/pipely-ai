@@ -397,18 +397,61 @@ install_local() {
 
   DB_USER="pipely"
   DB_PASS="pipely123"
-  DB_PORT="5433"
   DB_NAME="pipely_ai"
+  EVOLUTION_KEY="pipely-dev-key"
 
-  copy_env_if_needed ".env.example" ".env" "Root .env"
-  copy_env_if_needed "server/.env.example" "server/.env" "Server .env"
-  copy_env_if_needed "agent/.env.example" "agent/.env" "Agent .env"
+  # Find free ports
+  find_free_port() {
+    local port="$1"
+    while [ "$port" -lt $(($1 + 20)) ]; do
+      if ! ss -tln 2>/dev/null | grep -q ":${port} " && ! netstat -tln 2>/dev/null | grep -q ":${port} "; then
+        echo "$port"
+        return
+      fi
+      port=$((port + 1))
+    done
+    echo "$1"
+  }
+
+  DB_PORT=$(find_free_port 5433)
+  EVOLUTION_PORT=$(find_free_port 8080)
+  [ "$DB_PORT" != "5433" ] && warn "Port 5433 in use, using $DB_PORT for PostgreSQL"
+  [ "$EVOLUTION_PORT" != "8080" ] && warn "Port 8080 in use, using $EVOLUTION_PORT for Evolution Go"
+
+  # Generate .env files with correct ports
+  if [ ! -f ".env" ]; then
+    echo "VITE_API_URL=http://localhost:3333" > .env
+    success "Root .env"
+  else
+    success "Root .env (already exists)"
+  fi
+
+  if [ ! -f "server/.env" ]; then
+    cat > server/.env <<ENVEOF
+DATABASE_URL=postgresql://pipely:pipely123@localhost:${DB_PORT}/pipely_ai
+JWT_SECRET=change-me-to-a-random-secret
+FRONTEND_URL=http://localhost:5173
+BACKEND_URL=http://localhost:3333
+EVOLUTION_SERVER_URL=http://localhost:${EVOLUTION_PORT}
+EVOLUTION_API_KEY=${EVOLUTION_KEY}
+ENVEOF
+    success "Server .env (port $DB_PORT, evo $EVOLUTION_PORT)"
+  else
+    success "Server .env (already exists)"
+  fi
+
+  if [ ! -f "agent/.env" ]; then
+    cat > agent/.env <<ENVEOF
+DATABASE_URL=postgresql://pipely:pipely123@localhost:${DB_PORT}/pipely_ai
+POLL_INTERVAL_MS=60000
+ENVEOF
+    success "Agent .env"
+  else
+    success "Agent .env (already exists)"
+  fi
 
   # ── Step 5: Database + Evolution Go ────────────────────────────────────────
   step 5 "Database + Evolution Go"
-
-  EVOLUTION_PORT="8080"
-  EVOLUTION_KEY="pipely-dev-key"
 
   if [ "$HAS_DOCKER" = "true" ]; then
     # PostgreSQL
@@ -511,9 +554,9 @@ show_local_summary() {
   printf "  ${GREEN}Frontend${RESET}      http://localhost:5173\n"
   printf "  ${GREEN}Backend${RESET}       http://localhost:3333\n"
   printf "  ${GREEN}Agent${RESET}         http://localhost:3335\n"
-  printf "  ${GREEN}Evolution Go${RESET}  http://localhost:8080\n"
-  printf "  ${GREEN}Manager${RESET}       http://localhost:8080/manager\n"
-  printf "  ${GREEN}Database${RESET}      localhost:5433\n"
+  printf "  ${GREEN}Evolution Go${RESET}  http://localhost:${EVOLUTION_PORT}\n"
+  printf "  ${GREEN}Manager${RESET}       http://localhost:${EVOLUTION_PORT}/manager\n"
+  printf "  ${GREEN}Database${RESET}      localhost:${DB_PORT}\n"
   echo ""
   printf "  ${BOLD}Evolution Go API Key:${RESET} ${YELLOW}${EVOLUTION_KEY}${RESET}\n"
   printf "  ${DIM}(use to login at Manager)${RESET}\n"
