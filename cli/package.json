@@ -1,10 +1,10 @@
 {
-  "name": "create-pipely",
-  "version": "1.2.0",
-  "description": "Setup Pipely AI com um unico comando — detecta OS, configura portas, gera chaves, sobe Docker",
+  "name": "pipely-ai",
+  "version": "1.0.0",
+  "description": "Pipely AI — Instale, gerencie e atualize com um unico comando",
   "type": "module",
   "bin": {
-    "create-pipely": "index.js"
+    "pipely-ai": "index.js"
   },
   "engines": {
     "node": ">=18"

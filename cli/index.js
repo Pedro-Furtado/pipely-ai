@@ -33,19 +33,13 @@ function detectOS() {
   const p = platform();
   const r = release();
   const a = arch();
-
   const labels = {
     win32: `Windows (${r})`,
     darwin: `macOS (${r})`,
     linux: `Linux (${r})`,
     freebsd: `FreeBSD (${r})`,
   };
-
-  return {
-    platform: p,
-    label: labels[p] || `${p} (${r})`,
-    arch: a,
-  };
+  return { platform: p, label: labels[p] || `${p} (${r})`, arch: a };
 }
 
 function checkDocker() {
@@ -86,8 +80,7 @@ function isPortFree(port) {
             encoding: "utf-8",
             stdio: ["pipe", "pipe", "pipe"],
           });
-          const dockerUsing = out.includes(`:${port}->`);
-          resolve(!dockerUsing);
+          resolve(!out.includes(`:${port}->`));
         } catch {
           resolve(true);
         }
@@ -122,16 +115,12 @@ function commandExists(cmd) {
 
 function getServerIP() {
   try {
-    const ip = execSync(
+    return execSync(
       "hostname -I 2>/dev/null || curl -s ifconfig.me 2>/dev/null",
-      {
-        encoding: "utf-8",
-        stdio: ["pipe", "pipe", "pipe"],
-      }
+      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
     )
       .trim()
-      .split(/\s+/)[0];
-    return ip || null;
+      .split(/\s+/)[0] || null;
   } catch {
     return null;
   }
@@ -146,35 +135,69 @@ function isRoot() {
   }
 }
 
-// ── Port prompt with availability check ─────────────
+function findProjectDir() {
+  // Look for docker-compose.yml with pipely containers
+  const candidates = [process.cwd(), join(process.env.HOME || "/root", "pipely")];
+  for (const dir of candidates) {
+    const composePath = join(dir, "docker-compose.yml");
+    if (existsSync(composePath)) {
+      try {
+        const content = readFileSync(composePath, "utf-8");
+        if (content.includes("pipely")) return dir;
+      } catch {}
+    }
+  }
+  return null;
+}
+
+function readEnvFile(dir) {
+  try {
+    const content = readFileSync(join(dir, ".env"), "utf-8");
+    const env = {};
+    for (const line of content.split("\n")) {
+      const match = line.match(/^([A-Z_]+)=(.*)$/);
+      if (match) env[match[1]] = match[2];
+    }
+    return env;
+  } catch {
+    return {};
+  }
+}
+
+function requireProject() {
+  const dir = findProjectDir();
+  if (!dir) {
+    console.log(`\n  ${c.red}✗ Projeto Pipely nao encontrado${c.reset}`);
+    console.log(`  Execute na pasta onde rodou ${c.cyan}npx pipely-ai${c.reset} ou instale primeiro.\n`);
+    process.exit(1);
+  }
+  const composeCmd = getComposeCmd();
+  if (!composeCmd) {
+    console.log(`\n  ${c.red}✗ Docker Compose nao encontrado${c.reset}\n`);
+    process.exit(1);
+  }
+  return { dir, composeCmd };
+}
+
+// ── Port prompt ─────────────────────────────────────
 
 async function askPort(rl, label, defaultPort, takenPorts) {
   while (true) {
-    const raw = await rl.question(
-      `  ${label} ${c.dim}[${defaultPort}]${c.reset}: `
-    );
+    const raw = await rl.question(`  ${label} ${c.dim}[${defaultPort}]${c.reset}: `);
     const port = parseInt(raw.trim() || String(defaultPort), 10);
-
     if (isNaN(port) || port < 1 || port > 65535) {
       console.log(`  ${c.red}✗ Porta invalida (1-65535)${c.reset}\n`);
       continue;
     }
-
     if (takenPorts.includes(port)) {
-      console.log(
-        `  ${c.red}✗ Porta ${port} ja escolhida para outro servico${c.reset}\n`
-      );
+      console.log(`  ${c.red}✗ Porta ${port} ja escolhida para outro servico${c.reset}\n`);
       continue;
     }
-
     process.stdout.write(`  ${c.dim}→ Testando porta ${port}...${c.reset} `);
-    const free = await isPortFree(port);
-
-    if (free) {
+    if (await isPortFree(port)) {
       console.log(`${c.green}✓ Livre${c.reset}\n`);
       return port;
     }
-
     console.log(`${c.red}✗ Em uso!${c.reset}\n`);
   }
 }
@@ -194,7 +217,7 @@ function generateCompose(ports, domain) {
     ? `https://${domain}`
     : `http://localhost:\${FRONTEND_PORT:-${ports.frontend}}`;
 
-  return `# Pipely AI — gerado por create-pipely
+  return `# Pipely AI — gerado por npx pipely-ai
 # Docs: https://github.com/Pedro-Furtado/pipely-ai
 
 services:
@@ -268,7 +291,7 @@ volumes:
 
 function generateEnv(ports, keys, domain) {
   const now = new Date().toISOString().split("T")[0];
-  let env = `# Pipely AI — gerado por create-pipely em ${now}
+  let env = `# Pipely AI — gerado por npx pipely-ai em ${now}
 # Docs: https://github.com/Pedro-Furtado/pipely-ai
 
 # ── Portas ────────────────────────────────
@@ -286,36 +309,28 @@ EVOLUTION_API_KEY=${keys.evolutionApiKey}
 # ── App ───────────────────────────────────
 POLL_INTERVAL_MS=60000
 `;
-
   if (domain) {
     env += `\n# ── Dominio ───────────────────────────────\nAPP_DOMAIN=${domain}\n`;
   }
-
   return env;
 }
 
-// ── init-db.sh content ──────────────────────────────
-
 const INIT_DB_SH = `#!/bin/bash
 set -e
-
-# Cria banco separado para Evolution Go
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
     SELECT 'CREATE DATABASE evolution_go' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'evolution_go')\\gexec
 EOSQL
 `;
 
-// ── Wait for app health ─────────────────────────────
+// ── Wait for health ─────────────────────────────────
 
 async function waitForHealth(port, maxWaitMs = 120000) {
   const start = Date.now();
   let dots = 0;
   while (Date.now() - start < maxWaitMs) {
-    const ok = await httpGet(`http://localhost:${port}/health`);
-    if (ok) return true;
+    if (await httpGet(`http://localhost:${port}/health`)) return true;
     await sleep(2000);
-    dots++;
-    if (dots % 3 === 0) process.stdout.write(".");
+    if (++dots % 3 === 0) process.stdout.write(".");
   }
   return false;
 }
@@ -338,66 +353,45 @@ function getSetupKey(composeCmd, cwd) {
   }
 }
 
-// ── Domain + SSL Setup ──────────────────────────────
+// ── Domain + SSL ────────────────────────────────────
 
 function setupDomainSSL(domain, port) {
-  // ── Install Nginx ──
   if (!commandExists("nginx")) {
     process.stdout.write(`  Instalando Nginx... `);
     try {
-      execSync(
-        "apt-get update -qq && apt-get install -y -qq nginx > /dev/null 2>&1",
-        { stdio: "pipe" }
-      );
-      execSync("systemctl enable nginx && systemctl start nginx", {
-        stdio: "pipe",
-      });
+      execSync("apt-get update -qq && apt-get install -y -qq nginx > /dev/null 2>&1", { stdio: "pipe" });
+      execSync("systemctl enable nginx && systemctl start nginx", { stdio: "pipe" });
       console.log(`${c.green}✓${c.reset}`);
     } catch {
       console.log(`${c.red}✗${c.reset}`);
-      console.log(
-        `  ${c.red}Erro ao instalar Nginx. Instale manualmente: apt install nginx${c.reset}\n`
-      );
+      console.log(`  ${c.red}Erro ao instalar Nginx${c.reset}\n`);
       return false;
     }
   } else {
     console.log(`  ${c.green}✓${c.reset} Nginx instalado`);
   }
 
-  // ── Install Certbot ──
   if (!commandExists("certbot")) {
     process.stdout.write(`  Instalando Certbot... `);
     try {
-      execSync(
-        "apt-get update -qq && apt-get install -y -qq certbot python3-certbot-nginx > /dev/null 2>&1",
-        { stdio: "pipe" }
-      );
+      execSync("apt-get update -qq && apt-get install -y -qq certbot python3-certbot-nginx > /dev/null 2>&1", { stdio: "pipe" });
       console.log(`${c.green}✓${c.reset}`);
     } catch {
       console.log(`${c.red}✗${c.reset}`);
-      console.log(
-        `  ${c.red}Erro ao instalar Certbot. Instale manualmente: apt install certbot python3-certbot-nginx${c.reset}\n`
-      );
+      console.log(`  ${c.red}Erro ao instalar Certbot${c.reset}\n`);
       return false;
     }
   } else {
     console.log(`  ${c.green}✓${c.reset} Certbot instalado`);
   }
 
-  // ── Remove default site ──
-  try {
-    execSync("rm -f /etc/nginx/sites-enabled/default", { stdio: "pipe" });
-  } catch {}
+  try { execSync("rm -f /etc/nginx/sites-enabled/default", { stdio: "pipe" }); } catch {}
 
-  // ── Create Nginx config ──
   process.stdout.write(`  Configurando Nginx... `);
-
   const nginxConfig = `server {
     listen 80;
     server_name ${domain};
-
     large_client_header_buffers 4 32k;
-
     location / {
         proxy_pass http://127.0.0.1:${port};
         proxy_http_version 1.1;
@@ -412,107 +406,63 @@ function setupDomainSSL(domain, port) {
     }
 }
 `;
-
   try {
     writeFileSync("/etc/nginx/sites-available/pipely", nginxConfig);
-    execSync(
-      "ln -sf /etc/nginx/sites-available/pipely /etc/nginx/sites-enabled/",
-      { stdio: "pipe" }
-    );
+    execSync("ln -sf /etc/nginx/sites-available/pipely /etc/nginx/sites-enabled/", { stdio: "pipe" });
     execSync("nginx -t", { stdio: "pipe" });
     execSync("systemctl reload nginx", { stdio: "pipe" });
     console.log(`${c.green}✓${c.reset}`);
   } catch {
     console.log(`${c.red}✗${c.reset}`);
-    console.log(
-      `  ${c.yellow}⚠ Nginx falhou (porta 80 pode estar em uso por outro proxy)${c.reset}`
-    );
-    console.log(
-      `  ${c.dim}Se usa Caddy/Traefik, configure o proxy manualmente para ${domain} → localhost:${port}${c.reset}`
-    );
+    console.log(`  ${c.yellow}⚠ Nginx falhou (porta 80 pode estar em uso por outro proxy)${c.reset}`);
+    console.log(`  ${c.dim}Se usa Caddy/Traefik, configure o proxy para ${domain} → localhost:${port}${c.reset}`);
     return false;
   }
 
-  // ── SSL with Certbot ──
   process.stdout.write(`  Configurando SSL... `);
-
   try {
-    execSync(
-      `certbot --nginx -d ${domain} --non-interactive --agree-tos --register-unsafely-without-email 2>&1`,
-      { stdio: "pipe" }
-    );
+    execSync(`certbot --nginx -d ${domain} --non-interactive --agree-tos --register-unsafely-without-email 2>&1`, { stdio: "pipe" });
     console.log(`${c.green}✓${c.reset}`);
     return true;
   } catch {
     console.log(`${c.yellow}✗${c.reset}`);
-    console.log("");
-    console.log(
-      `  ${c.yellow}⚠ SSL falhou. Verifique se o DNS A record aponta para este servidor.${c.reset}`
-    );
-    console.log(
-      `  ${c.dim}Tente depois: certbot --nginx -d ${domain}${c.reset}`
-    );
+    console.log(`  ${c.yellow}⚠ SSL falhou. Verifique DNS A record.${c.reset}`);
+    console.log(`  ${c.dim}Tente depois: certbot --nginx -d ${domain}${c.reset}`);
     return false;
   }
 }
 
-// ── Docker install instructions ─────────────────────
+// ── Docker install help ─────────────────────────────
 
 function printDockerHelp(os) {
   console.log(`\n  ${c.red}✗ Docker nao encontrado${c.reset}\n`);
-  console.log(`  Instale o Docker antes de continuar:\n`);
-
   if (os.platform === "win32") {
-    console.log(`  Windows:`);
-    console.log(
-      `    https://docs.docker.com/desktop/install/windows-install/`
-    );
-    console.log(`    Ou via winget: winget install Docker.DockerDesktop\n`);
+    console.log(`  Windows: https://docs.docker.com/desktop/install/windows-install/\n`);
   } else if (os.platform === "darwin") {
-    console.log(`  macOS:`);
-    console.log(`    https://docs.docker.com/desktop/install/mac-install/`);
-    console.log(`    Ou via brew: brew install --cask docker\n`);
+    console.log(`  macOS: https://docs.docker.com/desktop/install/mac-install/\n`);
   } else {
-    console.log(`  Linux:`);
-    console.log(`    curl -fsSL https://get.docker.com | sh`);
-    console.log(`    sudo usermod -aG docker $USER`);
-    console.log(`    (relogar apos adicionar ao grupo)\n`);
+    console.log(`  Linux: curl -fsSL https://get.docker.com | sh\n`);
   }
 }
 
-// ── Banner ───────────────────────────────────────────
+// ── Banner ──────────────────────────────────────────
 
 function printBanner() {
   console.log("");
-  console.log(
-    `  ${c.magenta}${c.bold}╔═══════════════════════════════════════════╗${c.reset}`
-  );
-  console.log(
-    `  ${c.magenta}${c.bold}║           PIPELY AI  INSTALLER            ║${c.reset}`
-  );
-  console.log(
-    `  ${c.magenta}${c.bold}║     Automacao de tarefas + WhatsApp       ║${c.reset}`
-  );
-  console.log(
-    `  ${c.magenta}${c.bold}╚═══════════════════════════════════════════╝${c.reset}`
-  );
+  console.log(`  ${c.magenta}${c.bold}╔═══════════════════════════════════════════╗${c.reset}`);
+  console.log(`  ${c.magenta}${c.bold}║             PIPELY AI                     ║${c.reset}`);
+  console.log(`  ${c.magenta}${c.bold}║     Automacao de tarefas + WhatsApp       ║${c.reset}`);
+  console.log(`  ${c.magenta}${c.bold}╚═══════════════════════════════════════════╝${c.reset}`);
   console.log("");
 }
 
-// ── Summary ──────────────────────────────────────────
+// ── Summary (after install) ─────────────────────────
 
-function printSummary(ports, keys, setupKey, domain, sslOk) {
+function printInstallSummary(ports, keys, setupKey, domain, sslOk) {
   const line = "═".repeat(56);
-  const baseUrl =
-    domain && sslOk
-      ? `https://${domain}`
-      : domain
-        ? `http://${domain}`
-        : `http://localhost:${ports.frontend}`;
+  const baseUrl = domain && sslOk ? `https://${domain}` : domain ? `http://${domain}` : `http://localhost:${ports.frontend}`;
   const ip = getServerIP();
-  const evolutionUrl = domain
-    ? `http://${ip || "SEU_IP"}:${ports.evolution}`
-    : `http://localhost:${ports.evolution}`;
+  const evolutionUrl = domain ? `http://${ip || "SEU_IP"}:${ports.evolution}` : `http://localhost:${ports.evolution}`;
 
   console.log("");
   console.log(`  ${c.green}${line}${c.reset}`);
@@ -523,69 +473,227 @@ function printSummary(ports, keys, setupKey, domain, sslOk) {
   console.log(`    Frontend:        ${c.cyan}${baseUrl}${c.reset}`);
   console.log(`    Backend API:     ${c.cyan}${baseUrl}/api${c.reset}`);
   if (!domain) {
-    console.log(
-      `    Backend direto:  ${c.cyan}http://localhost:${ports.backend}${c.reset}`
-    );
-    console.log(
-      `    Agent Webhook:   ${c.cyan}http://localhost:${ports.agent}/webhook${c.reset}`
-    );
+    console.log(`    Backend direto:  ${c.cyan}http://localhost:${ports.backend}${c.reset}`);
+    console.log(`    Agent Webhook:   ${c.cyan}http://localhost:${ports.agent}/webhook${c.reset}`);
   }
   console.log(`    Evolution Go:    ${c.cyan}${evolutionUrl}${c.reset}`);
-  console.log(
-    `    Evolution Mgr:   ${c.cyan}${evolutionUrl}/manager${c.reset}`
-  );
+  console.log(`    Evolution Mgr:   ${c.cyan}${evolutionUrl}/manager${c.reset}`);
   console.log("");
   console.log(`  ${c.bold}Chaves:${c.reset}`);
-  console.log(
-    `    Evolution Key:   ${c.yellow}${keys.evolutionApiKey}${c.reset}`
-  );
+  console.log(`    Evolution Key:   ${c.yellow}${keys.evolutionApiKey}${c.reset}`);
   if (setupKey) {
-    console.log(
-      `    Setup Key:       ${c.yellow}${setupKey}${c.reset}`
-    );
+    console.log(`    Setup Key:       ${c.yellow}${setupKey}${c.reset}`);
   }
   console.log("");
   console.log(`  ${c.bold}Proximo passo:${c.reset}`);
-  console.log(
-    `    1. Acesse ${c.cyan}${baseUrl}/setup${c.reset}`
-  );
+  console.log(`    1. Acesse ${c.cyan}${baseUrl}/setup${c.reset}`);
   if (setupKey) {
     console.log(`    2. Use a Setup Key acima para criar sua conta`);
     console.log(`    3. Configure WhatsApp e OpenAI nas paginas do app`);
   } else {
-    console.log(
-      `    2. Veja a Setup Key nos logs: ${c.dim}docker compose logs app | grep "SETUP KEY" -A3${c.reset}`
-    );
+    console.log(`    2. Veja a Setup Key: ${c.dim}npx pipely-ai keys${c.reset}`);
     console.log(`    3. Configure WhatsApp e OpenAI nas paginas do app`);
   }
   console.log("");
-  console.log(`  ${c.bold}Comandos uteis:${c.reset}`);
-  console.log(
-    `    docker compose logs -f app    ${c.dim}# Ver logs${c.reset}`
-  );
-  console.log(
-    `    docker compose down            ${c.dim}# Parar${c.reset}`
-  );
-  console.log(
-    `    docker compose up -d           ${c.dim}# Iniciar${c.reset}`
-  );
+  console.log(`  ${c.bold}Comandos:${c.reset}`);
+  console.log(`    npx pipely-ai status    ${c.dim}# Ver status e URLs${c.reset}`);
+  console.log(`    npx pipely-ai keys      ${c.dim}# Ver chaves${c.reset}`);
+  console.log(`    npx pipely-ai logs      ${c.dim}# Ver logs${c.reset}`);
+  console.log(`    npx pipely-ai stop      ${c.dim}# Parar${c.reset}`);
+  console.log(`    npx pipely-ai start     ${c.dim}# Iniciar${c.reset}`);
+  console.log(`    npx pipely-ai update    ${c.dim}# Atualizar${c.reset}`);
   console.log("");
   console.log(`  ${c.green}${line}${c.reset}`);
   console.log("");
 }
 
-// ── Main ─────────────────────────────────────────────
+// ══════════════════════════════════════════════════════
+// ── COMMANDS ─────────────────────────────────────────
+// ══════════════════════════════════════════════════════
 
-async function main() {
+// ── status ──────────────────────────────────────────
+
+function cmdStatus() {
+  const { dir, composeCmd } = requireProject();
+  const env = readEnvFile(dir);
+  const domain = env.APP_DOMAIN || null;
+  const ip = getServerIP();
+  const frontendPort = env.FRONTEND_PORT || "3000";
+  const evolutionPort = env.EVOLUTION_PORT || "8080";
+  const baseUrl = domain ? `https://${domain}` : `http://${ip || "localhost"}:${frontendPort}`;
+  const evolutionUrl = `http://${ip || "localhost"}:${evolutionPort}`;
+
+  console.log("");
+  console.log(`  ${c.bold}PIPELY AI — Status${c.reset}\n`);
+
+  // Container status
+  try {
+    const ps = execSync(`${composeCmd} ps --format "table {{.Name}}\t{{.State}}\t{{.Ports}}"`, {
+      cwd: dir,
+      encoding: "utf-8",
+    });
+    console.log(`  ${c.bold}Containers:${c.reset}`);
+    for (const line of ps.trim().split("\n")) {
+      const state = line.includes("running") ? c.green : line.includes("exited") ? c.red : c.dim;
+      console.log(`    ${state}${line}${c.reset}`);
+    }
+  } catch {
+    console.log(`  ${c.red}Nenhum container rodando${c.reset}`);
+  }
+
+  console.log("");
+  console.log(`  ${c.bold}Endpoints:${c.reset}`);
+  console.log(`    Frontend:        ${c.cyan}${baseUrl}${c.reset}`);
+  console.log(`    Backend API:     ${c.cyan}${baseUrl}/api${c.reset}`);
+  console.log(`    Evolution Go:    ${c.cyan}${evolutionUrl}${c.reset}`);
+  console.log(`    Evolution Mgr:   ${c.cyan}${evolutionUrl}/manager${c.reset}`);
+
+  if (domain) {
+    console.log(`\n  ${c.bold}Dominio:${c.reset} ${c.cyan}${domain}${c.reset}`);
+  }
+
+  console.log(`\n  ${c.bold}Diretorio:${c.reset} ${c.dim}${dir}${c.reset}`);
+  console.log("");
+}
+
+// ── keys ────────────────────────────────────────────
+
+function cmdKeys() {
+  const { dir, composeCmd } = requireProject();
+  const env = readEnvFile(dir);
+
+  console.log("");
+  console.log(`  ${c.bold}PIPELY AI — Chaves${c.reset}\n`);
+
+  if (env.EVOLUTION_API_KEY) {
+    console.log(`  Evolution Key:   ${c.yellow}${env.EVOLUTION_API_KEY}${c.reset}`);
+  }
+  if (env.JWT_SECRET) {
+    console.log(`  JWT Secret:      ${c.yellow}${env.JWT_SECRET.slice(0, 16)}...${c.reset}`);
+  }
+
+  // Setup key from logs
+  const setupKey = getSetupKey(composeCmd, dir);
+  if (setupKey) {
+    console.log(`  Setup Key:       ${c.yellow}${setupKey}${c.reset}`);
+  } else {
+    console.log(`  Setup Key:       ${c.dim}(nao encontrada nos logs — conta ja pode ter sido criada)${c.reset}`);
+  }
+
+  console.log("");
+}
+
+// ── logs ────────────────────────────────────────────
+
+function cmdLogs(service) {
+  const { dir, composeCmd } = requireProject();
+  const target = service || "app";
+  try {
+    execSync(`${composeCmd} logs -f --tail 100 ${target}`, {
+      cwd: dir,
+      stdio: "inherit",
+    });
+  } catch {
+    // User pressed Ctrl+C
+  }
+}
+
+// ── stop ────────────────────────────────────────────
+
+function cmdStop() {
+  const { dir, composeCmd } = requireProject();
+  console.log(`\n  Parando containers...`);
+  try {
+    execSync(`${composeCmd} down`, { cwd: dir, stdio: "inherit" });
+    console.log(`\n  ${c.green}✓${c.reset} Containers parados\n`);
+  } catch {
+    console.log(`\n  ${c.red}✗ Erro ao parar containers${c.reset}\n`);
+  }
+}
+
+// ── start ───────────────────────────────────────────
+
+function cmdStart() {
+  const { dir, composeCmd } = requireProject();
+  console.log(`\n  Iniciando containers...`);
+  try {
+    execSync(`${composeCmd} up -d`, { cwd: dir, stdio: "inherit" });
+    console.log(`\n  ${c.green}✓${c.reset} Containers iniciados\n`);
+  } catch {
+    console.log(`\n  ${c.red}✗ Erro ao iniciar containers${c.reset}\n`);
+  }
+}
+
+// ── restart ─────────────────────────────────────────
+
+function cmdRestart() {
+  const { dir, composeCmd } = requireProject();
+  console.log(`\n  Reiniciando containers...`);
+  try {
+    execSync(`${composeCmd} restart`, { cwd: dir, stdio: "inherit" });
+    console.log(`\n  ${c.green}✓${c.reset} Containers reiniciados\n`);
+  } catch {
+    console.log(`\n  ${c.red}✗ Erro ao reiniciar containers${c.reset}\n`);
+  }
+}
+
+// ── update ──────────────────────────────────────────
+
+function cmdUpdate() {
+  const { dir, composeCmd } = requireProject();
+  console.log(`\n  ${c.bold}Atualizando Pipely AI...${c.reset}\n`);
+
+  process.stdout.write(`  Baixando imagem nova... `);
+  try {
+    execSync(`${composeCmd} pull app`, { cwd: dir, stdio: "pipe" });
+    console.log(`${c.green}✓${c.reset}`);
+  } catch {
+    console.log(`${c.red}✗${c.reset}`);
+    console.log(`  ${c.red}Erro ao baixar imagem${c.reset}\n`);
+    return;
+  }
+
+  process.stdout.write(`  Recriando container... `);
+  try {
+    execSync(`${composeCmd} up -d --no-deps app`, { cwd: dir, stdio: "pipe" });
+    console.log(`${c.green}✓${c.reset}`);
+  } catch {
+    console.log(`${c.red}✗${c.reset}`);
+    console.log(`  ${c.red}Erro ao recriar container${c.reset}\n`);
+    return;
+  }
+
+  console.log(`\n  ${c.green}✓${c.reset} Atualizado com sucesso!\n`);
+}
+
+// ── help ────────────────────────────────────────────
+
+function cmdHelp() {
+  printBanner();
+  console.log(`  ${c.bold}Comandos:${c.reset}\n`);
+  console.log(`    ${c.cyan}npx pipely-ai${c.reset}              Instalar Pipely AI`);
+  console.log(`    ${c.cyan}npx pipely-ai status${c.reset}       Ver status, endpoints e dominio`);
+  console.log(`    ${c.cyan}npx pipely-ai keys${c.reset}         Ver chaves (Evolution, Setup Key)`);
+  console.log(`    ${c.cyan}npx pipely-ai logs${c.reset}         Ver logs do app (Ctrl+C para sair)`);
+  console.log(`    ${c.cyan}npx pipely-ai logs db${c.reset}      Ver logs do banco de dados`);
+  console.log(`    ${c.cyan}npx pipely-ai stop${c.reset}         Parar todos os containers`);
+  console.log(`    ${c.cyan}npx pipely-ai start${c.reset}        Iniciar containers`);
+  console.log(`    ${c.cyan}npx pipely-ai restart${c.reset}      Reiniciar containers`);
+  console.log(`    ${c.cyan}npx pipely-ai update${c.reset}       Atualizar para ultima versao`);
+  console.log(`    ${c.cyan}npx pipely-ai help${c.reset}         Mostrar esta ajuda`);
+  console.log("");
+}
+
+// ══════════════════════════════════════════════════════
+// ── INSTALL (main) ───────────────────────────────────
+// ══════════════════════════════════════════════════════
+
+async function install() {
   printBanner();
 
-  // ── Detect OS ──
   const os = detectOS();
-  console.log(
-    `  Sistema: ${c.bold}${os.label}${c.reset} (${os.arch})\n`
-  );
+  console.log(`  Sistema: ${c.bold}${os.label}${c.reset} (${os.arch})\n`);
 
-  // ── Check Docker ──
   process.stdout.write(`  Verificando Docker... `);
   const docker = checkDocker();
   if (!docker.ok) {
@@ -594,19 +702,12 @@ async function main() {
   }
   console.log(`${c.green}✓${c.reset} v${docker.version}`);
 
-  // ── Check Docker Compose ──
   const composeCmd = getComposeCmd();
   if (!composeCmd) {
-    console.log(
-      `\n  ${c.red}✗ Docker Compose nao encontrado${c.reset}`
-    );
-    console.log(
-      `  Atualize o Docker ou instale docker-compose separadamente.\n`
-    );
+    console.log(`\n  ${c.red}✗ Docker Compose nao encontrado${c.reset}\n`);
     process.exit(1);
   }
 
-  // ── Check Docker is running ──
   try {
     execSync("docker info", { stdio: "pipe" });
   } catch {
@@ -621,11 +722,7 @@ async function main() {
 
   console.log("");
 
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
   let done = false;
   rl.on("close", () => {
     if (!done) {
@@ -634,123 +731,60 @@ async function main() {
     }
   });
 
-  // ── Port Configuration ──
-  console.log(
-    `  ${c.magenta}── Configuracao de Portas ──────────────────${c.reset}\n`
-  );
-  console.log(
-    `  Pressione ${c.bold}Enter${c.reset} para usar o valor recomendado.\n`
-  );
+  // ── Ports ──
+  console.log(`  ${c.magenta}── Configuracao de Portas ──────────────────${c.reset}\n`);
+  console.log(`  Pressione ${c.bold}Enter${c.reset} para usar o valor recomendado.\n`);
 
   const takenPorts = [];
-
-  const frontendPort = await askPort(
-    rl,
-    "Aplicacao (Frontend + API)",
-    3000,
-    takenPorts
-  );
+  const frontendPort = await askPort(rl, "Aplicacao (Frontend + API)", 3000, takenPorts);
   takenPorts.push(frontendPort);
-
-  const backendPort = await askPort(
-    rl,
-    "Backend API (acesso direto)",
-    3333,
-    takenPorts
-  );
+  const backendPort = await askPort(rl, "Backend API (acesso direto)", 3333, takenPorts);
   takenPorts.push(backendPort);
-
   const agentPort = await askPort(rl, "Agent Webhook", 3335, takenPorts);
   takenPorts.push(agentPort);
-
-  const evolutionPort = await askPort(
-    rl,
-    "Evolution Go (WhatsApp)",
-    8080,
-    takenPorts
-  );
+  const evolutionPort = await askPort(rl, "Evolution Go (WhatsApp)", 8080, takenPorts);
   takenPorts.push(evolutionPort);
-
   const dbPort = await askPort(rl, "PostgreSQL", 5433, takenPorts);
   takenPorts.push(dbPort);
 
-  const ports = {
-    frontend: frontendPort,
-    backend: backendPort,
-    agent: agentPort,
-    evolution: evolutionPort,
-    db: dbPort,
-  };
+  const ports = { frontend: frontendPort, backend: backendPort, agent: agentPort, evolution: evolutionPort, db: dbPort };
 
-  // ── Generate Keys ──
-  console.log(
-    `  ${c.magenta}── Seguranca ──────────────────────────────${c.reset}\n`
-  );
-
-  const keys = {
-    dbPassword: generateKey(32),
-    jwtSecret: generateKey(64),
-    evolutionApiKey: generateKey(32),
-  };
-
+  // ── Keys ──
+  console.log(`  ${c.magenta}── Seguranca ──────────────────────────────${c.reset}\n`);
+  const keys = { dbPassword: generateKey(32), jwtSecret: generateKey(64), evolutionApiKey: generateKey(32) };
   console.log(`  ${c.green}✓${c.reset} DB_PASSWORD gerado`);
   console.log(`  ${c.green}✓${c.reset} JWT_SECRET gerado`);
   console.log(`  ${c.green}✓${c.reset} EVOLUTION_API_KEY gerado`);
   console.log("");
 
-  // ── Domain Configuration (optional) ──
+  // ── Domain (optional) ──
   let domain = null;
   let sslOk = false;
   const isLinux = os.platform === "linux";
   const hasRoot = isLinux && isRoot();
 
-  console.log(
-    `  ${c.magenta}── Dominio (opcional) ─────────────────────${c.reset}\n`
-  );
+  console.log(`  ${c.magenta}── Dominio (opcional) ─────────────────────${c.reset}\n`);
 
   if (!isLinux) {
-    console.log(
-      `  ${c.dim}Dominio + SSL disponivel apenas em servidores Linux (VPS)${c.reset}`
-    );
-    console.log(
-      `  ${c.dim}Acesse via http://localhost:${ports.frontend}${c.reset}\n`
-    );
+    console.log(`  ${c.dim}Dominio + SSL disponivel apenas em servidores Linux (VPS)${c.reset}\n`);
   } else if (!hasRoot) {
-    console.log(
-      `  ${c.dim}Dominio + SSL requer root. Execute com sudo para habilitar.${c.reset}`
-    );
-    console.log(
-      `  ${c.dim}Acesse via http://localhost:${ports.frontend}${c.reset}\n`
-    );
+    console.log(`  ${c.dim}Dominio + SSL requer root. Execute com sudo para habilitar.${c.reset}\n`);
   } else {
     const wantsDomain = await askYesNo(rl, "Configurar dominio + SSL?");
-
     if (wantsDomain) {
       const ip = getServerIP();
       if (ip) {
         console.log("");
         console.log(`  IP do servidor: ${c.cyan}${ip}${c.reset}`);
-        console.log(
-          `  ${c.dim}Aponte o DNS A record do dominio para este IP${c.reset}\n`
-        );
+        console.log(`  ${c.dim}Aponte o DNS A record do dominio para este IP${c.reset}\n`);
       }
-
-      const rawDomain = await rl.question(
-        `  Dominio (ex: pipely.seusite.com): `
-      );
+      const rawDomain = await rl.question(`  Dominio (ex: pipely.seusite.com): `);
       domain = rawDomain.trim();
-
       if (!domain) {
-        console.log(
-          `  ${c.yellow}⚠ Dominio vazio — continuando sem SSL${c.reset}\n`
-        );
+        console.log(`  ${c.yellow}⚠ Dominio vazio — continuando sem SSL${c.reset}\n`);
         domain = null;
-      } else if (
-        !/^[a-zA-Z0-9]([a-zA-Z0-9-]*\.)+[a-zA-Z]{2,}$/.test(domain)
-      ) {
-        console.log(
-          `  ${c.yellow}⚠ Formato invalido — continuando sem SSL${c.reset}\n`
-        );
+      } else if (!/^[a-zA-Z0-9]([a-zA-Z0-9-]*\.)+[a-zA-Z]{2,}$/.test(domain)) {
+        console.log(`  ${c.yellow}⚠ Formato invalido — continuando sem SSL${c.reset}\n`);
         domain = null;
       }
     } else {
@@ -763,111 +797,70 @@ async function main() {
 
   // ── Generate Files ──
   const targetDir = process.cwd();
+  console.log(`  ${c.magenta}── Gerando configuracao ────────────────────${c.reset}\n`);
 
-  console.log(
-    `  ${c.magenta}── Gerando configuracao ────────────────────${c.reset}\n`
-  );
-
-  const composeContent = generateCompose(ports, domain);
-  const envContent = generateEnv(ports, keys, domain);
-
-  writeFileSync(join(targetDir, "docker-compose.yml"), composeContent);
-  writeFileSync(join(targetDir, ".env"), envContent);
+  writeFileSync(join(targetDir, "docker-compose.yml"), generateCompose(ports, domain));
+  writeFileSync(join(targetDir, ".env"), generateEnv(ports, keys, domain));
   writeFileSync(join(targetDir, "init-db.sh"), INIT_DB_SH);
 
   if (os.platform !== "win32") {
-    try {
-      execSync(`chmod +x "${join(targetDir, "init-db.sh")}"`, {
-        stdio: "pipe",
-      });
-    } catch {}
+    try { execSync(`chmod +x "${join(targetDir, "init-db.sh")}"`, { stdio: "pipe" }); } catch {}
   }
 
   console.log(`  ${c.green}✓${c.reset} docker-compose.yml`);
   console.log(`  ${c.green}✓${c.reset} .env`);
   console.log(`  ${c.green}✓${c.reset} init-db.sh`);
 
-  // ── Pull Images ──
-  console.log(
-    `\n  ${c.magenta}── Iniciando ──────────────────────────────${c.reset}\n`
-  );
-  console.log(
-    `  Baixando imagens Docker ${c.dim}(pode demorar na primeira vez)${c.reset}...\n`
-  );
+  // ── Pull & Start ──
+  console.log(`\n  ${c.magenta}── Iniciando ──────────────────────────────${c.reset}\n`);
+  console.log(`  Baixando imagens Docker ${c.dim}(pode demorar na primeira vez)${c.reset}...\n`);
 
   try {
-    execSync(`${composeCmd} pull`, {
-      cwd: targetDir,
-      stdio: "inherit",
-    });
+    execSync(`${composeCmd} pull`, { cwd: targetDir, stdio: "inherit" });
   } catch {
-    console.log(`\n  ${c.red}✗ Erro ao baixar imagens${c.reset}`);
-    console.log(
-      `  Verifique sua conexao e tente: ${composeCmd} pull\n`
-    );
+    console.log(`\n  ${c.red}✗ Erro ao baixar imagens${c.reset}\n`);
     process.exit(1);
   }
 
-  // ── Start Containers ──
   console.log(`\n  Iniciando containers...`);
-
   try {
-    execSync(`${composeCmd} up -d`, {
-      cwd: targetDir,
-      stdio: "pipe",
-    });
+    execSync(`${composeCmd} up -d`, { cwd: targetDir, stdio: "pipe" });
     console.log(`  ${c.green}✓${c.reset} Containers iniciados`);
   } catch (err) {
     const stderr = err.stderr?.toString() || "";
-    const portMatch = stderr.match(
-      /Bind for .+:(\d+) failed: port is already allocated/
-    );
+    const portMatch = stderr.match(/Bind for .+:(\d+) failed: port is already allocated/);
     if (portMatch) {
-      console.log(
-        `  ${c.red}✗ Porta ${portMatch[1]} esta ocupada por outro container Docker${c.reset}`
-      );
-      console.log(`  Pare o container que usa essa porta ou escolha outra.`);
+      console.log(`  ${c.red}✗ Porta ${portMatch[1]} esta ocupada${c.reset}`);
       console.log(`  ${c.dim}docker ps  # para ver containers rodando${c.reset}`);
     } else {
       console.log(`  ${c.red}✗ Erro ao iniciar containers${c.reset}`);
       if (stderr) console.log(`  ${c.dim}${stderr.trim()}${c.reset}`);
     }
-    console.log(`\n  Apos corrigir, tente: ${composeCmd} up -d\n`);
     process.exit(1);
   }
 
   // ── Wait for Health ──
   console.log(`\n  Aguardando servicos ficarem prontos...`);
   process.stdout.write("  ");
-
   const healthy = await waitForHealth(ports.frontend, 120000);
-
   if (healthy) {
     console.log(`\n  ${c.green}✓${c.reset} Aplicacao pronta`);
   } else {
-    console.log(
-      `\n  ${c.yellow}⚠ Timeout aguardando aplicacao${c.reset}`
-    );
-    console.log(
-      `  ${c.dim}Os containers estao rodando. Verifique os logs: ${composeCmd} logs -f app${c.reset}`
-    );
+    console.log(`\n  ${c.yellow}⚠ Timeout — verifique: ${composeCmd} logs -f app${c.reset}`);
   }
 
-  // ── Domain + SSL (after containers are up) ──
+  // ── Domain + SSL ──
   if (domain && hasRoot) {
     console.log("");
-    console.log(
-      `  ${c.magenta}── Configurando dominio + SSL ─────────────${c.reset}\n`
-    );
+    console.log(`  ${c.magenta}── Configurando dominio + SSL ─────────────${c.reset}\n`);
     sslOk = setupDomainSSL(domain, ports.frontend);
   }
 
-  // ── Get Setup Key ──
+  // ── Setup Key ──
   let setupKey = null;
   if (healthy) {
     await sleep(3000);
     setupKey = getSetupKey(composeCmd, targetDir);
-
     if (!setupKey) {
       for (let i = 0; i < 5; i++) {
         await sleep(2000);
@@ -877,35 +870,46 @@ async function main() {
     }
   }
 
-  // ── Summary ──
-  printSummary(ports, keys, setupKey, domain, sslOk);
+  printInstallSummary(ports, keys, setupKey, domain, sslOk);
 }
 
-// ── Run ──────────────────────────────────────────────
+// ══════════════════════════════════════════════════════
+// ── ROUTER ───────────────────────────────────────────
+// ══════════════════════════════════════════════════════
 
 const args = process.argv.slice(2);
 const command = args[0];
 
-if (command === "help" || command === "--help" || command === "-h") {
-  printBanner();
-  console.log(`  ${c.bold}Uso:${c.reset}\n`);
-  console.log(
-    `    ${c.cyan}npx create-pipely${c.reset}       Instalar Pipely AI (Docker)`
-  );
-  console.log(
-    `    ${c.cyan}npx create-pipely help${c.reset}  Mostrar esta ajuda`
-  );
-  console.log("");
-  console.log(`  ${c.bold}Exemplos:${c.reset}\n`);
-  console.log(`    ${c.dim}# Instalar com portas padrao${c.reset}`);
-  console.log(`    npx create-pipely\n`);
-  console.log(`    ${c.dim}# Durante a instalacao, escolha se quer dominio + SSL${c.reset}`);
-  console.log("");
-} else {
-  main().catch((err) => {
-    console.error(
-      `\n  ${c.red}Erro inesperado: ${err.message}${c.reset}\n`
-    );
-    process.exit(1);
-  });
+switch (command) {
+  case "status":
+    cmdStatus();
+    break;
+  case "keys":
+    cmdKeys();
+    break;
+  case "logs":
+    cmdLogs(args[1]);
+    break;
+  case "stop":
+    cmdStop();
+    break;
+  case "start":
+    cmdStart();
+    break;
+  case "restart":
+    cmdRestart();
+    break;
+  case "update":
+    cmdUpdate();
+    break;
+  case "help":
+  case "--help":
+  case "-h":
+    cmdHelp();
+    break;
+  default:
+    install().catch((err) => {
+      console.error(`\n  ${c.red}Erro: ${err.message}${c.reset}\n`);
+      process.exit(1);
+    });
 }
