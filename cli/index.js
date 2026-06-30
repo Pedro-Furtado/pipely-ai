@@ -4,7 +4,7 @@ import { createInterface } from "node:readline/promises";
 import { createServer as createNetServer } from "node:net";
 import { randomBytes } from "node:crypto";
 import { execSync } from "node:child_process";
-import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { writeFileSync, readFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { platform, release, arch, hostname } from "node:os";
 import http from "node:http";
@@ -393,12 +393,245 @@ function printSummary(ports, keys, setupKey) {
   console.log(
     `    docker compose up -d           ${c.dim}# Iniciar${c.reset}`
   );
+  console.log(
+    `    npx create-pipely domain       ${c.dim}# Configurar dominio + SSL${c.reset}`
+  );
   console.log("");
   console.log(`  ${c.green}${line}${c.reset}`);
   console.log("");
 }
 
-// ── Main ─────────────────────────────────────────────
+// ── Domain Setup ────────────────────────────────────
+
+function getPortFromEnv() {
+  try {
+    const env = readFileSync(join(process.cwd(), ".env"), "utf-8");
+    const match = env.match(/^FRONTEND_PORT=(\d+)/m);
+    return match ? match[1] : "3000";
+  } catch {
+    return "3000";
+  }
+}
+
+function getServerIP() {
+  try {
+    const ip = execSync("hostname -I 2>/dev/null || curl -s ifconfig.me 2>/dev/null", {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim().split(/\s+/)[0];
+    return ip || null;
+  } catch {
+    return null;
+  }
+}
+
+async function domainSetup(domainArg) {
+  console.log("");
+  console.log(
+    `  ${c.magenta}${c.bold}╔═══════════════════════════════════════════╗${c.reset}`
+  );
+  console.log(
+    `  ${c.magenta}${c.bold}║        PIPELY AI  DOMAIN SETUP            ║${c.reset}`
+  );
+  console.log(
+    `  ${c.magenta}${c.bold}║     Configurar dominio + SSL (HTTPS)      ║${c.reset}`
+  );
+  console.log(
+    `  ${c.magenta}${c.bold}╚═══════════════════════════════════════════╝${c.reset}`
+  );
+  console.log("");
+
+  // ── Check Linux ──
+  if (platform() !== "linux") {
+    console.log(`  ${c.red}✗ Este comando funciona apenas em servidores Linux (VPS)${c.reset}`);
+    console.log(`  Em ambientes locais, acesse via http://localhost\n`);
+    process.exit(1);
+  }
+
+  // ── Check root ──
+  try {
+    execSync("test $(id -u) -eq 0", { stdio: "pipe" });
+  } catch {
+    console.log(`  ${c.red}✗ Execute como root (sudo)${c.reset}`);
+    console.log(`  ${c.dim}sudo npx create-pipely domain${c.reset}\n`);
+    process.exit(1);
+  }
+
+  // ── Get domain ──
+  let domain = domainArg;
+
+  if (!domain) {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    rl.on("close", () => {
+      if (!domain) {
+        console.log(`\n\n  ${c.yellow}Cancelado.${c.reset}\n`);
+        process.exit(0);
+      }
+    });
+
+    const ip = getServerIP();
+    if (ip) {
+      console.log(`  IP do servidor: ${c.cyan}${ip}${c.reset}`);
+      console.log(`  ${c.dim}Aponte o DNS A record do dominio para este IP${c.reset}\n`);
+    }
+
+    domain = await rl.question(`  Dominio (ex: pipely.seusite.com): `);
+    domain = domain.trim();
+    rl.close();
+
+    if (!domain) {
+      console.log(`\n  ${c.red}✗ Dominio nao informado${c.reset}\n`);
+      process.exit(1);
+    }
+  }
+
+  // ── Validate domain format ──
+  if (!/^[a-zA-Z0-9]([a-zA-Z0-9-]*\.)+[a-zA-Z]{2,}$/.test(domain)) {
+    console.log(`  ${c.red}✗ Formato de dominio invalido: ${domain}${c.reset}\n`);
+    process.exit(1);
+  }
+
+  const port = getPortFromEnv();
+
+  console.log("");
+  console.log(`  Dominio:   ${c.bold}${domain}${c.reset}`);
+  console.log(`  App porta: ${c.bold}${port}${c.reset}`);
+  console.log("");
+
+  // ── Install Nginx ──
+  if (!commandExists("nginx")) {
+    process.stdout.write(`  Instalando Nginx... `);
+    try {
+      execSync("apt-get update -qq && apt-get install -y -qq nginx > /dev/null 2>&1", {
+        stdio: "pipe",
+      });
+      execSync("systemctl enable nginx && systemctl start nginx", { stdio: "pipe" });
+      console.log(`${c.green}✓${c.reset}`);
+    } catch {
+      console.log(`${c.red}✗${c.reset}`);
+      console.log(`  ${c.red}Erro ao instalar Nginx. Instale manualmente: apt install nginx${c.reset}\n`);
+      process.exit(1);
+    }
+  } else {
+    console.log(`  ${c.green}✓${c.reset} Nginx instalado`);
+  }
+
+  // ── Install Certbot ──
+  if (!commandExists("certbot")) {
+    process.stdout.write(`  Instalando Certbot... `);
+    try {
+      execSync("apt-get update -qq && apt-get install -y -qq certbot python3-certbot-nginx > /dev/null 2>&1", {
+        stdio: "pipe",
+      });
+      console.log(`${c.green}✓${c.reset}`);
+    } catch {
+      console.log(`${c.red}✗${c.reset}`);
+      console.log(`  ${c.red}Erro ao instalar Certbot. Instale manualmente: apt install certbot python3-certbot-nginx${c.reset}\n`);
+      process.exit(1);
+    }
+  } else {
+    console.log(`  ${c.green}✓${c.reset} Certbot instalado`);
+  }
+
+  // ── Remove default site ──
+  try {
+    execSync("rm -f /etc/nginx/sites-enabled/default", { stdio: "pipe" });
+  } catch {}
+
+  // ── Create Nginx config ──
+  process.stdout.write(`  Configurando Nginx... `);
+
+  const nginxConfig = `server {
+    listen 80;
+    server_name ${domain};
+
+    large_client_header_buffers 4 32k;
+
+    location / {
+        proxy_pass http://127.0.0.1:${port};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_buffering off;
+        proxy_read_timeout 86400;
+    }
+}
+`;
+
+  try {
+    writeFileSync("/etc/nginx/sites-available/pipely", nginxConfig);
+    execSync("ln -sf /etc/nginx/sites-available/pipely /etc/nginx/sites-enabled/", { stdio: "pipe" });
+    execSync("nginx -t", { stdio: "pipe" });
+    execSync("systemctl reload nginx", { stdio: "pipe" });
+    console.log(`${c.green}✓${c.reset}`);
+  } catch {
+    console.log(`${c.red}✗${c.reset}`);
+    console.log(`  ${c.red}Erro na configuracao do Nginx. Verifique: nginx -t${c.reset}\n`);
+    process.exit(1);
+  }
+
+  // ── SSL with Certbot ──
+  process.stdout.write(`  Configurando SSL... `);
+
+  try {
+    execSync(
+      `certbot --nginx -d ${domain} --non-interactive --agree-tos --register-unsafely-without-email 2>&1`,
+      { stdio: "pipe" }
+    );
+    console.log(`${c.green}✓${c.reset}`);
+  } catch {
+    console.log(`${c.yellow}✗${c.reset}`);
+    console.log("");
+    console.log(`  ${c.yellow}⚠ SSL falhou. Verifique se o DNS A record aponta para este servidor.${c.reset}`);
+    console.log(`  ${c.dim}Tente novamente depois: certbot --nginx -d ${domain}${c.reset}`);
+    console.log("");
+    console.log(`  App disponivel em: ${c.cyan}http://${domain}${c.reset} (sem SSL)`);
+    console.log("");
+    return;
+  }
+
+  // ── Restart app ──
+  const composeFile = join(process.cwd(), "docker-compose.yml");
+  if (existsSync(composeFile)) {
+    try {
+      const composeCmd = getComposeCmd();
+      if (composeCmd) {
+        execSync(`${composeCmd} restart app`, { stdio: "pipe" });
+        console.log(`  ${c.green}✓${c.reset} App reiniciado`);
+      }
+    } catch {}
+  }
+
+  // ── Summary ──
+  console.log("");
+  console.log(`  ${c.green}${"═".repeat(52)}${c.reset}`);
+  console.log(`  ${c.green}${c.bold}  ✓ Dominio configurado!${c.reset}`);
+  console.log(`  ${c.green}${"═".repeat(52)}${c.reset}`);
+  console.log("");
+  console.log(`  ${c.cyan}https://${domain}${c.reset}`);
+  console.log(`  ${c.cyan}https://${domain}/setup${c.reset}  ${c.dim}(primeiro acesso)${c.reset}`);
+  console.log("");
+  console.log(`  ${c.bold}Comandos uteis:${c.reset}`);
+  console.log(`    certbot renew --dry-run               ${c.dim}# Testar renovacao SSL${c.reset}`);
+  console.log(`    nginx -t && systemctl reload nginx     ${c.dim}# Recarregar config${c.reset}`);
+  console.log(`    npx create-pipely domain outro.site    ${c.dim}# Trocar dominio${c.reset}`);
+  console.log("");
+}
+
+function commandExists(cmd) {
+  try {
+    execSync(`command -v ${cmd}`, { stdio: "pipe" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ── Main (install) ──────────────────────────────────
 
 async function main() {
   printBanner();
@@ -642,7 +875,31 @@ async function main() {
 
 // ── Run ──────────────────────────────────────────────
 
-main().catch((err) => {
-  console.error(`\n  ${c.red}Erro inesperado: ${err.message}${c.reset}\n`);
-  process.exit(1);
-});
+const args = process.argv.slice(2);
+const command = args[0];
+
+if (command === "domain") {
+  domainSetup(args[1]).catch((err) => {
+    console.error(`\n  ${c.red}Erro inesperado: ${err.message}${c.reset}\n`);
+    process.exit(1);
+  });
+} else if (command === "help" || command === "--help" || command === "-h") {
+  printBanner();
+  console.log(`  ${c.bold}Comandos:${c.reset}\n`);
+  console.log(`    ${c.cyan}npx create-pipely${c.reset}              Instalar Pipely AI (Docker)`);
+  console.log(`    ${c.cyan}npx create-pipely domain${c.reset}       Configurar dominio + SSL`);
+  console.log(`    ${c.cyan}npx create-pipely help${c.reset}         Mostrar esta ajuda`);
+  console.log("");
+  console.log(`  ${c.bold}Exemplos:${c.reset}\n`);
+  console.log(`    ${c.dim}# Instalar com portas padrao${c.reset}`);
+  console.log(`    npx create-pipely\n`);
+  console.log(`    ${c.dim}# Configurar dominio interativamente${c.reset}`);
+  console.log(`    npx create-pipely domain\n`);
+  console.log(`    ${c.dim}# Configurar dominio direto${c.reset}`);
+  console.log(`    npx create-pipely domain pipely.meusite.com\n`);
+} else {
+  main().catch((err) => {
+    console.error(`\n  ${c.red}Erro inesperado: ${err.message}${c.reset}\n`);
+    process.exit(1);
+  });
+}

@@ -1,6 +1,6 @@
 {
   "name": "create-pipely",
-  "version": "1.0.5",
+  "version": "1.1.0",
   "description": "Setup Pipely AI com um unico comando — detecta OS, configura portas, gera chaves, sobe Docker",
   "type": "module",
   "bin": {
