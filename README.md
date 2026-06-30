@@ -38,52 +38,94 @@ Pipely AI automates task management through visual pipelines connected to WhatsA
 
 ## Quick Start
 
-One command to install. Works on **VPS (production)** and **local machine (development)**.
+One command. Works on **any OS** — local machine or VPS.
 
-**Linux / macOS:**
-```bash
-curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.sh | bash
-```
-
-**Windows (PowerShell):**
-```powershell
-irm https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.ps1 | iex
-```
-
-The installer will ask you to choose:
-
-| Mode | What it does |
-|------|-------------|
-| **Production** | Installs Docker, generates credentials, starts containers, shows setup URL |
-| **Local Dev** | Checks Node.js, clones repo, installs dependencies, sets up PostgreSQL, runs Prisma |
-
-You can also skip the prompt:
+**Requirements:** [Docker](https://docs.docker.com/get-docker/) + [Node.js 18+](https://nodejs.org/)
 
 ```bash
-# Linux / macOS — production
-curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.sh | bash -s -- --prod
-
-# Linux / macOS — local development
-curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.sh | bash -s -- --local
+npx create-pipely
 ```
 
-```powershell
-# Windows — production
-$env:PIPELY_ACTION="prod"; irm https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.ps1 | iex
+The installer will:
 
-# Windows — local development
-$env:PIPELY_ACTION="local"; irm https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.ps1 | iex
+1. Detect your OS (Windows, macOS, Linux)
+2. Ask you to configure ports (with availability testing)
+3. Auto-generate unique security keys
+4. Pull Docker images and start all services
+5. Show you all endpoints, keys, and the setup URL
+
+```
+  Endpoints:
+    Frontend:        http://localhost:3000
+    Backend API:     http://localhost:3000/api
+    Backend direto:  http://localhost:3333
+    Agent Webhook:   http://localhost:3335/webhook
+    Evolution Go:    http://localhost:8080
+    Evolution Mgr:   http://localhost:8080/manager
+
+  Chaves:
+    Evolution Key:   a1b2c3d4e5f6...
+    Setup Key:       2e5b1c1e-e898-...
 ```
 
-### What the installer checks
+### What gets created
 
-| Dependency | Production | Local Dev |
-|------------|-----------|-----------|
-| Docker | Required (auto-installs on Linux) | Optional (for PostgreSQL) |
-| Node.js 18+ | — | Required |
-| Git | — | Required (to clone repo) |
+The CLI generates 3 files in the current directory:
 
-After install, the script shows you the exact next steps.
+| File | Purpose |
+|------|---------|
+| `docker-compose.yml` | Container orchestration (app + db + evolution) |
+| `.env` | Ports and auto-generated security keys |
+| `init-db.sh` | Creates the Evolution Go database on first start |
+
+No project cloning, no dependency installation. Everything runs via Docker images.
+
+---
+
+## First-Time Setup
+
+1. **Open** the Frontend URL shown after install (e.g. `http://localhost:3000/setup`)
+2. **Enter the Setup Key** (shown in the install summary and in container logs)
+3. **Create your owner account** (name, email, password)
+4. **Login** and start using
+
+### Setup Key
+
+The setup key is auto-generated every time the app starts without an owner account. View it anytime:
+
+```bash
+docker compose logs app | grep "SETUP KEY" -A 3
+```
+
+---
+
+## Managing the App
+
+Run these commands from the directory where you ran `npx create-pipely`:
+
+```bash
+# Start
+docker compose up -d
+
+# Stop
+docker compose down
+
+# View logs
+docker compose logs -f app
+
+# Restart
+docker compose restart
+
+# Update to latest version
+docker compose pull
+docker compose up -d
+
+# View ports and keys
+cat .env
+
+# Full reset (deletes all data)
+docker compose down -v
+```
 
 ---
 
@@ -102,47 +144,16 @@ Go to your domain provider (Cloudflare, Hostinger, GoDaddy, etc.) and add an **A
 ### 2. Run one command
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/domain.sh | sh -s pipely.yourdomain.com 3002
+curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/domain.sh | sh -s pipely.yourdomain.com 3000
 ```
 
-Replace `pipely.yourdomain.com` with your domain and `3002` with your app port.
+Replace `pipely.yourdomain.com` with your domain and `3000` with your app port.
 
 This will:
 - Configure Nginx reverse proxy
 - Install and configure SSL (Let's Encrypt)
 - Update your `.env` with the HTTPS URL
 - Restart the app
-
-Your app is now live at `https://pipely.yourdomain.com`.
-
----
-
-## First-Time Setup
-
-1. **Open** `http://YOUR_IP:PORT/setup`
-2. **Enter the setup key** (shown in container logs)
-3. **Create your owner account** (name, email, password)
-4. **Login** and start using
-
-### Setup Key
-
-The setup key is auto-generated on first start and shown in the logs:
-
-```
-═══════════════════════════════════════════════════════════
-  PIPELY AI — SETUP KEY (auto-generated)
-
-  2e5b1c1e-e898-4e01-bc7e-7ae3f5ef1699
-
-  Use this key at /setup to create your owner account.
-═══════════════════════════════════════════════════════════
-```
-
-View it anytime:
-
-```bash
-docker compose -f docker-compose.prod.yml logs app | grep "SETUP KEY" -A2
-```
 
 ---
 
@@ -218,16 +229,18 @@ Each dynamic block can have:
 
 ## Environment Variables
 
-All variables are auto-generated by `setup.sh`. You can view/edit them in `.env`:
+All variables are auto-generated by `npx create-pipely`. View/edit in `.env`:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DB_USER` | PostgreSQL username | `pipely` |
+| `FRONTEND_PORT` | App port (Frontend + API via nginx) | `3000` |
+| `BACKEND_PORT` | Direct Express API access | `3333` |
+| `AGENT_PORT` | Agent webhook port | `3335` |
+| `EVOLUTION_PORT` | Evolution Go (WhatsApp) | `8080` |
+| `DB_PORT` | PostgreSQL | `5433` |
 | `DB_PASSWORD` | PostgreSQL password | *auto-generated* |
-| `DB_NAME` | Database name | `pipely_ai` |
 | `JWT_SECRET` | JWT signing secret | *auto-generated* |
-| `APP_URL` | Your domain or IP | *detected* |
-| `APP_PORT` | Port to expose | `80` |
+| `EVOLUTION_API_KEY` | Evolution Go API key | *auto-generated* |
 | `POLL_INTERVAL_MS` | Agent poll interval | `60000` |
 
 ---
@@ -236,7 +249,7 @@ All variables are auto-generated by `setup.sh`. You can view/edit them in `.env`
 
 ### WhatsApp (Evolution Go — bundled)
 
-Evolution Go comes bundled in production. No external server needed.
+Evolution Go comes bundled. No external server needed.
 
 1. Go to **WhatsApp** page
 2. Create an instance
@@ -251,67 +264,29 @@ Evolution Go comes bundled in production. No external server needed.
 
 ---
 
-## Commands
+## Development (from source)
 
-```bash
-# View logs
-docker compose -f docker-compose.prod.yml logs app
-
-# View logs (follow)
-docker compose -f docker-compose.prod.yml logs -f app
-
-# Stop
-docker compose -f docker-compose.prod.yml down
-
-# Start
-docker compose -f docker-compose.prod.yml up -d
-
-# Restart
-docker compose -f docker-compose.prod.yml restart app
-
-# Update to latest version
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
-
-# View credentials
-cat .env
-```
-
----
-
-## Local Development
-
-The fastest way:
-
-**Linux / macOS:**
-```bash
-curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.sh | bash -s -- --local
-```
-
-**Windows (PowerShell):**
-```powershell
-$env:PIPELY_ACTION="local"; irm https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.ps1 | iex
-```
-
-Or manually:
+For contributors who want to modify the code:
 
 ```bash
 git clone https://github.com/Pedro-Furtado/pipely-ai.git && cd pipely-ai
 
-# PostgreSQL
+# Start PostgreSQL + Evolution Go via Docker
 docker run --name postgres-pipely \
   -e POSTGRES_USER=pipely \
   -e POSTGRES_PASSWORD=pipely123 \
   -e POSTGRES_DB=pipely_ai \
   -p 5433:5432 -d postgres:17
 
-# Install & configure
-npm install && cd server && npm install && cd .. && cd agent && npm install && cd ..
+# Install dependencies
+npm install && cd server && npm install && cd ../agent && npm install && cd ..
+
+# Configure
 cp .env.example .env && cp server/.env.example server/.env && cp agent/.env.example agent/.env
 cd server && npm run db:push && npm run db:generate && cd ..
 
-# Run
-npm run dev:all          # Frontend + Backend + Agent
+# Run (shows endpoints banner on startup)
+npm run dev:all
 ```
 
 | Service | Port |
@@ -329,25 +304,20 @@ npm run dev:all          # Frontend + Backend + Agent
 | **Frontend** | React 19, TypeScript, Vite 8, Tailwind CSS v4, Radix UI, Recharts |
 | **Backend** | Node.js, Express 5, Prisma 7, PostgreSQL |
 | **Agent** | OpenAI API (GPT-4o-mini), Function Calling, Evolution Go |
-| **Infra** | Docker, Nginx |
+| **Infra** | Docker, Nginx, GitHub Actions (CI/CD) |
 
 ---
 
 ## Uninstall
 
-Remove Pipely AI completely — project files, Docker containers, and database volumes.
+Remove all containers, volumes, and configuration:
 
-**Linux / macOS:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.sh | bash -s -- --uninstall
+docker compose down -v
+rm docker-compose.yml .env init-db.sh
 ```
 
-**Windows (PowerShell):**
-```powershell
-$env:PIPELY_ACTION="uninstall"; irm https://raw.githubusercontent.com/Pedro-Furtado/pipely-ai/main/install.ps1 | iex
-```
-
-> **Warning:** This is destructive and cannot be undone. All data (database, configuration, project files) will be permanently deleted.
+> **Warning:** This is destructive and cannot be undone. All data (database, configuration) will be permanently deleted.
 
 ---
 
