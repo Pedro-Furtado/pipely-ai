@@ -433,10 +433,13 @@ async function main() {
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
 
-  // Handle Ctrl+C
+  // Handle Ctrl+C (only during prompts)
+  let done = false;
   rl.on("close", () => {
-    console.log(`\n\n  ${c.yellow}Instalacao cancelada.${c.reset}\n`);
-    process.exit(0);
+    if (!done) {
+      console.log(`\n\n  ${c.yellow}Instalacao cancelada.${c.reset}\n`);
+      process.exit(0);
+    }
   });
 
   // ── Port Configuration ──
@@ -503,6 +506,7 @@ async function main() {
   console.log(`  ${c.green}✓${c.reset} EVOLUTION_API_KEY gerado`);
   console.log("");
 
+  done = true;
   rl.close();
 
   // Grava arquivos no diretorio atual
