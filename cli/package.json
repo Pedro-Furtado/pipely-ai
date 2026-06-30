@@ -1,10 +1,10 @@
 {
   "name": "create-pipely",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Setup Pipely AI com um unico comando — detecta OS, configura portas, gera chaves, sobe Docker",
   "type": "module",
   "bin": {
-    "create-pipely": "./index.js"
+    "create-pipely": "index.js"
   },
   "engines": {
     "node": ">=18"
@@ -24,6 +24,6 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Pedro-Furtado/pipely-ai"
+    "url": "git+https://github.com/Pedro-Furtado/pipely-ai.git"
   }
 }
