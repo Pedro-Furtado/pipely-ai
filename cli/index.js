@@ -77,10 +77,24 @@ function getComposeCmd() {
 
 function isPortFree(port) {
   return new Promise((resolve) => {
+    // Check 1: try binding with net (catches most cases)
     const server = createNetServer();
     server.once("error", () => resolve(false));
     server.once("listening", () => {
-      server.close(() => resolve(true));
+      server.close(() => {
+        // Check 2: also check Docker containers (Windows doesn't always
+        // show Docker port bindings to Node.js net module)
+        try {
+          const out = execSync("docker ps --format '{{.Ports}}' 2>/dev/null", {
+            encoding: "utf-8",
+            stdio: ["pipe", "pipe", "pipe"],
+          });
+          const dockerUsing = out.includes(`:${port}->`);
+          resolve(!dockerUsing);
+        } catch {
+          resolve(true);
+        }
+      });
     });
     server.listen(port, "0.0.0.0");
   });
@@ -557,7 +571,7 @@ async function main() {
       `\n  ${c.red}✗ Erro ao baixar imagens${c.reset}`
     );
     console.log(
-      `  Verifique sua conexao e tente: cd ${dirInput} && ${composeCmd} pull\n`
+      `  Verifique sua conexao e tente: ${composeCmd} pull\n`
     );
     process.exit(1);
   }
@@ -572,11 +586,18 @@ async function main() {
     });
     console.log(`  ${c.green}✓${c.reset} Containers iniciados`);
   } catch (err) {
-    console.log(`  ${c.red}✗ Erro ao iniciar containers${c.reset}`);
     const stderr = err.stderr?.toString() || "";
-    if (stderr) console.log(`  ${c.dim}${stderr.trim()}${c.reset}`);
+    const portMatch = stderr.match(/Bind for .+:(\d+) failed: port is already allocated/);
+    if (portMatch) {
+      console.log(`  ${c.red}✗ Porta ${portMatch[1]} esta ocupada por outro container Docker${c.reset}`);
+      console.log(`  Pare o container que usa essa porta ou escolha outra.`);
+      console.log(`  ${c.dim}docker ps  # para ver containers rodando${c.reset}`);
+    } else {
+      console.log(`  ${c.red}✗ Erro ao iniciar containers${c.reset}`);
+      if (stderr) console.log(`  ${c.dim}${stderr.trim()}${c.reset}`);
+    }
     console.log(
-      `\n  Tente manualmente: cd ${dirInput} && ${composeCmd} up -d\n`
+      `\n  Apos corrigir, tente: ${composeCmd} up -d\n`
     );
     process.exit(1);
   }
