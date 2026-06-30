@@ -317,7 +317,7 @@ function printBanner() {
 
 // ── Summary ──────────────────────────────────────────
 
-function printSummary(ports, keys, setupKey, targetDir) {
+function printSummary(ports, keys, setupKey) {
   const line = "═".repeat(56);
 
   console.log("");
@@ -370,7 +370,6 @@ function printSummary(ports, keys, setupKey, targetDir) {
   }
   console.log("");
   console.log(`  ${c.bold}Comandos uteis:${c.reset}`);
-  console.log(`    ${c.dim}cd ${targetDir}${c.reset}`);
   console.log(
     `    docker compose logs -f app    ${c.dim}# Ver logs${c.reset}`
   );
@@ -504,32 +503,15 @@ async function main() {
   console.log(`  ${c.green}✓${c.reset} EVOLUTION_API_KEY gerado`);
   console.log("");
 
-  // ── Directory ──
-  console.log(
-    `  ${c.magenta}── Instalacao ─────────────────────────────${c.reset}\n`
-  );
-
-  const dirInput =
-    (
-      await rl.question(
-        `  Diretorio ${c.dim}[./pipely-ai]${c.reset}: `
-      )
-    ).trim() || "./pipely-ai";
-
   rl.close();
 
-  const targetDir = resolve(dirInput);
-
-  if (existsSync(targetDir)) {
-    console.log(
-      `\n  ${c.yellow}Diretorio ja existe. Arquivos serao sobrescritos.${c.reset}`
-    );
-  } else {
-    mkdirSync(targetDir, { recursive: true });
-  }
+  // Grava arquivos no diretorio atual
+  const targetDir = process.cwd();
 
   // ── Generate Files ──
-  console.log(`\n  Criando arquivos...`);
+  console.log(
+    `\n  ${c.magenta}── Gerando configuracao ────────────────────${c.reset}\n`
+  );
 
   const composeContent = generateCompose(ports);
   const envContent = generateEnv(ports, keys);
@@ -630,7 +612,7 @@ async function main() {
   }
 
   // ── Summary ──
-  printSummary(ports, keys, setupKey, dirInput);
+  printSummary(ports, keys, setupKey);
 }
 
 // ── Run ──────────────────────────────────────────────
