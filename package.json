@@ -7,7 +7,7 @@
     "dev": "vite",
     "dev:server": "cd server && npm run dev",
     "dev:agent": "cd agent && npm run dev",
-    "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\" \"npm run dev:agent\"",
+    "dev:all": "node scripts/dev-banner.mjs && concurrently \"npm run dev\" \"npm run dev:server\" \"npm run dev:agent\"",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"

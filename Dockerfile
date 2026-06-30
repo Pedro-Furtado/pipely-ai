@@ -92,20 +92,39 @@ cd /app/server\n\
 npx prisma db push 2>&1 || echo "[DB] Push failed — check DATABASE_URL"\n\
 \n\
 # Start server\n\
-echo "[SERVER] Starting..."\n\
+echo "[SERVER] Starting on port 3333..."\n\
 node dist/index.js &\n\
 sleep 3\n\
 \n\
 # Start agent\n\
-echo "[AGENT] Starting..."\n\
+echo "[AGENT] Starting on port 3335..."\n\
 cd /app/agent\n\
 node dist/index.js &\n\
+\n\
+# Show endpoints banner\n\
+EVOKEY="${EVOLUTION_API_KEY:-nao configurado}"\n\
+echo ""\n\
+echo "========================================================"\n\
+echo "  PIPELY AI — RODANDO"\n\
+echo "========================================================"\n\
+echo ""\n\
+echo "  Endpoints (internos do container):"\n\
+echo "    Frontend (nginx):  porta 80"\n\
+echo "    Backend API:       porta 3333"\n\
+echo "    Agent Webhook:     porta 3335"\n\
+echo ""\n\
+echo "  Evolution API Key:   $EVOKEY"\n\
+echo ""\n\
+echo "  Portas externas dependem do docker-compose.yml"\n\
+echo "  Veja .env para conferir as portas mapeadas."\n\
+echo "========================================================"\n\
+echo ""\n\
 \n\
 # Start nginx (foreground)\n\
 echo "[NGINX] Ready on port 80"\n\
 nginx -g "daemon off;"\n\
 ' > /app/start.sh && chmod +x /app/start.sh
 
-EXPOSE 80
+EXPOSE 80 3333 3335
 
 CMD ["/app/start.sh"]

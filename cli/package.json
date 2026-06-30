@@ -1,0 +1,29 @@
+{
+  "name": "create-pipely",
+  "version": "1.0.0",
+  "description": "Setup Pipely AI com um unico comando — detecta OS, configura portas, gera chaves, sobe Docker",
+  "type": "module",
+  "bin": {
+    "create-pipely": "./index.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "index.mjs"
+  ],
+  "keywords": [
+    "pipely",
+    "task-management",
+    "whatsapp",
+    "automation",
+    "pipeline",
+    "ai-agent"
+  ],
+  "author": "Pedro Furtado",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Pedro-Furtado/pipely-ai"
+  }
+}
