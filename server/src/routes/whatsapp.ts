@@ -17,10 +17,23 @@ router.get("/config", async (req: Request, res: Response) => {
 
     const isBundled = !!(process.env.EVOLUTION_SERVER_URL && process.env.EVOLUTION_API_KEY);
 
+    // For bundled mode, build public manager URL from EVOLUTION_PORT or default 8080
+    let managerUrl: string | null = null;
+    if (isBundled && config) {
+      const port = process.env.EVOLUTION_PORT || "8080";
+      const frontendUrl = process.env.FRONTEND_URL || "";
+      try {
+        const host = new URL(frontendUrl).hostname;
+        managerUrl = `http://${host}:${port}/manager`;
+      } catch {
+        managerUrl = `http://localhost:${port}/manager`;
+      }
+    }
+
     res.json({
       success: true,
       data: config
-        ? { id: config.id, serverUrl: config.serverUrl, isBundled }
+        ? { id: config.id, serverUrl: config.serverUrl, isBundled, managerUrl }
         : null,
       isBundled,
     });

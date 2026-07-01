@@ -5,6 +5,7 @@ export interface WhatsAppConfig {
   id: string
   serverUrl: string
   isBundled?: boolean
+  managerUrl?: string | null
 }
 
 export interface EvolutionInstance {

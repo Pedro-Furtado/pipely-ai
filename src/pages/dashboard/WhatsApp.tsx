@@ -347,7 +347,7 @@ export default function WhatsApp() {
             <Plus size={14} />
             Nova instancia
           </Button>
-          <a href={`${config.serverUrl}/manager`} target="_blank" rel="noopener noreferrer">
+          <a href={config.managerUrl || `${config.serverUrl}/manager`} target="_blank" rel="noopener noreferrer">
             <Button variant="outline" size="sm">
               <ExternalLink size={14} />
               Manager
