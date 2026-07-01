@@ -8,7 +8,7 @@ let prisma: PrismaClient;
 if (isSQLite) {
   const libsql = await import("@libsql/client");
   const adapterMod = await import("@prisma/adapter-libsql");
-  const PrismaLibSQL = adapterMod.PrismaLibSQL || adapterMod.default;
+  const PrismaLibSQL = adapterMod.PrismaLibSql || adapterMod.PrismaLibSQL || adapterMod.default;
 
   const client = libsql.createClient({ url: databaseUrl });
   const adapter = new PrismaLibSQL(client);
