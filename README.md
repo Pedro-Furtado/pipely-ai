@@ -30,7 +30,8 @@ Pipely AI automates task management through visual pipelines connected to WhatsA
 - WhatsApp automation via Evolution Go
 - Conditional routing based on member responses
 - Retry scheduling for unanswered tasks
-- Multi-member team management with invite links
+- Schedule-based automation (weekly or specific dates)
+- Team members managed by owner (name + phone, contacted via WhatsApp)
 - Dashboard with charts and KPIs
 - Fully self-hosted — your data stays on your server
 
@@ -90,7 +91,7 @@ No project cloning, no dependency installation. Everything runs via Docker image
 
 ### Setup Key
 
-The setup key is auto-generated every time the app starts without an owner account. View it anytime:
+The setup key is auto-generated every time the app starts without an owner account. It is also used to **reset your password** if you forget it. View it anytime:
 
 ```bash
 npx pipely-ai keys
@@ -146,12 +147,11 @@ If you use an external reverse proxy (Caddy, Traefik, Nginx Proxy Manager), conf
 ## Adding Team Members
 
 1. Go to **Time** (Team) page
-2. Click **Convidar** (Invite)
-3. Click **Gerar link** (Generate link)
-4. Copy the link and send it to your team member (WhatsApp, email, etc.)
-5. Member opens the link, creates an account, and automatically joins your team
+2. Click **Adicionar membro** (Add member)
+3. Enter the member's **name** and **phone number**
+4. The AI agent contacts them via WhatsApp automatically
 
-No email server required. Links expire after the configured time.
+Members don't need accounts or access to the platform — they interact only through WhatsApp.
 
 ---
 
@@ -208,8 +208,9 @@ Each dynamic block can have:
 | **No-reply** | Move task if no response after X time |
 | **Conditional routing** | Branch based on member's response |
 | **Retry** | Re-ask after X time if condition matches |
+| **Schedule** | Move task on specific days/times (weekly or date-based) |
 | **Auto-status** | Change task status on block entry |
-| **Notification** | Notify member when task enters block |
+| **Notification** | Notify owner when task enters block |
 
 ---
 

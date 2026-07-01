@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
+import { format } from 'date-fns'
 import {
   Zap,
   Layers,
@@ -12,6 +13,9 @@ import {
   Trash2,
   RotateCcw,
   ArrowRight,
+  CalendarIcon,
+  CircleDot,
+  CheckCircle2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { pipelineService, type PipelineBlock, type Pipeline } from '@/services/pipeline'
@@ -22,7 +26,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { Spinner } from '@/components/ui/spinner'
 import { Combobox } from '@/components/ui/combobox'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import {
   Dialog,
@@ -47,6 +54,22 @@ interface Branch {
   condition: string
   retry_minutes?: number
 }
+
+interface ScheduleEntry {
+  day?: string
+  date?: string
+  time: string
+}
+
+const WEEK_DAYS = [
+  { value: 'mon', label: 'Seg' },
+  { value: 'tue', label: 'Ter' },
+  { value: 'wed', label: 'Qua' },
+  { value: 'thu', label: 'Qui' },
+  { value: 'fri', label: 'Sex' },
+  { value: 'sat', label: 'Sab' },
+  { value: 'sun', label: 'Dom' },
+]
 
 function minutesToDaysTime(totalMinutes: number): { days: string; time: string } {
   const d = Math.floor(totalMinutes / 1440)
@@ -77,6 +100,8 @@ export default function BlockConfigModal({ block, pipeline, open, onClose, onSav
   const [notifyOnEntry, setNotifyOnEntry] = useState(false)
   const [autoStatus, setAutoStatus] = useState('')
   const [branches, setBranches] = useState<Branch[]>([])
+  const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([])
+  const [scheduleMode, setScheduleMode] = useState<'weekly' | 'specific'>('weekly')
   const [saving, setSaving] = useState(false)
 
   // All blocks except current for destination selectors
@@ -115,6 +140,13 @@ export default function BlockConfigModal({ block, pipeline, open, onClose, onSav
     setNotifyOnEntry(!!(c.notify_on_entry))
     setAutoStatus((c.auto_status as string) || '')
     setBranches((c.branches as Branch[]) || [])
+    const sched = c.schedule as { entries?: ScheduleEntry[] } | undefined
+    if (sched?.entries?.length) {
+      setScheduleEntries(sched.entries)
+      setScheduleMode(sched.entries[0]?.date ? 'specific' : 'weekly')
+    } else {
+      setScheduleEntries([])
+    }
   }, [block])
 
   async function handleSave() {
@@ -151,11 +183,12 @@ export default function BlockConfigModal({ block, pipeline, open, onClose, onSav
           })
         if (validBranches.length > 0) config.branches = validBranches
         if (autoStatus) config.auto_status = autoStatus
+        if (notifyOnEntry) config.notify_on_entry = true
+        const validSchedule = scheduleEntries.filter((e) => e.time && (e.day || e.date))
+        if (validSchedule.length > 0) config.schedule = { entries: validSchedule }
       }
 
-      if (notifyOnEntry) config.notify_on_entry = true
 
-      if (notifyOnEntry) config.notify_on_entry = true
 
       await pipelineService.updateBlock(block.id, { blockType, config })
       toast.success('Bloco configurado')
@@ -279,7 +312,7 @@ export default function BlockConfigModal({ block, pipeline, open, onClose, onSav
                         <div className="space-y-1">
                           <Label className="text-[10px]">Hora</Label>
                           <Input
-                            type="time"
+                            type="time" style={{ colorScheme: 'dark' }}
                             value={msgDelayTime}
                             onChange={(e) => setMsgDelayTime(e.target.value)}
                             className="h-8 text-xs"
@@ -299,15 +332,19 @@ export default function BlockConfigModal({ block, pipeline, open, onClose, onSav
 
               {/* ── Notificação ── */}
               <Section icon={Bell} title="Notificacao">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
+                <div className="flex items-start gap-2">
+                  <Checkbox
+                    id="notify-on-entry"
                     checked={notifyOnEntry}
-                    onChange={(e) => setNotifyOnEntry(e.target.checked)}
-                    className="rounded border-zinc-600 bg-zinc-800 text-blue-500 focus:ring-blue-500"
+                    onCheckedChange={(checked) => setNotifyOnEntry(checked === true)}
                   />
-                  <span className="text-xs text-zinc-300">Notificar membro atribuido quando tarefa entrar neste bloco</span>
-                </label>
+                  <div>
+                    <label htmlFor="notify-on-entry" className="text-xs text-zinc-300 cursor-pointer">
+                      Notificar quando uma tarefa entrar neste bloco
+                    </label>
+                    <p className="text-[10px] text-zinc-500 mt-0.5">Voce recebe uma notificacao na plataforma para acompanhar o fluxo.</p>
+                  </div>
+                </div>
               </Section>
 
               {/* ── Status automático ── */}
@@ -321,9 +358,24 @@ export default function BlockConfigModal({ block, pipeline, open, onClose, onSav
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="_none">Nao alterar</SelectItem>
-                    <SelectItem value="todo">📋 A fazer</SelectItem>
-                    <SelectItem value="in_progress">⏳ Em andamento</SelectItem>
-                    <SelectItem value="done">✅ Concluida</SelectItem>
+                    <SelectItem value="todo">
+                      <span className="flex items-center gap-2">
+                        <CircleDot size={14} className="text-zinc-400" />
+                        A fazer
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="in_progress">
+                      <span className="flex items-center gap-2">
+                        <Clock size={14} className="text-blue-400" />
+                        Em andamento
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="done">
+                      <span className="flex items-center gap-2">
+                        <CheckCircle2 size={14} className="text-green-400" />
+                        Concluida
+                      </span>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </Section>
@@ -347,7 +399,7 @@ export default function BlockConfigModal({ block, pipeline, open, onClose, onSav
                     <div className="space-y-1">
                       <Label className="text-[10px]">Hora</Label>
                       <Input
-                        type="time"
+                        type="time" style={{ colorScheme: 'dark' }}
                         value={delayTime}
                         onChange={(e) => setDelayTime(e.target.value)}
                         className="h-8 text-xs"
@@ -374,6 +426,156 @@ export default function BlockConfigModal({ block, pipeline, open, onClose, onSav
                 </div>
               </Section>
 
+              {/* ── Agendamento ── */}
+              <Section
+                icon={Clock}
+                title="Agendamento"
+                highlight={scheduleEntries.length > 0 ? 'blue' : undefined}
+              >
+                <p className="text-[10px] text-zinc-500 mb-2">
+                  Mover tarefa para outro bloco em dias e horarios especificos. Ideal para lembretes recorrentes.
+                </p>
+
+                {scheduleEntries.length > 0 && (
+                  <div className="flex gap-1.5 mb-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setScheduleMode('weekly')
+                        setScheduleEntries((prev) => prev.map((e) => ({ day: e.day || 'mon', time: e.time })))
+                      }}
+                      className={cn(
+                        'rounded-md border px-2.5 py-1 text-[10px] transition-colors',
+                        scheduleMode === 'weekly'
+                          ? 'border-blue-500/50 bg-blue-500/10 text-blue-300'
+                          : 'border-zinc-800 text-zinc-500 hover:border-zinc-700'
+                      )}
+                    >
+                      Dias da semana
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setScheduleMode('specific')
+                        setScheduleEntries((prev) => prev.map((e) => ({ date: e.date || '', time: e.time })))
+                      }}
+                      className={cn(
+                        'rounded-md border px-2.5 py-1 text-[10px] transition-colors',
+                        scheduleMode === 'specific'
+                          ? 'border-blue-500/50 bg-blue-500/10 text-blue-300'
+                          : 'border-zinc-800 text-zinc-500 hover:border-zinc-700'
+                      )}
+                    >
+                      Data especifica
+                    </button>
+                  </div>
+                )}
+
+                {scheduleEntries.length > 0 && (
+                  <div className="space-y-2">
+                    {scheduleEntries.map((entry, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        {scheduleMode === 'weekly' ? (
+                          <Select
+                            value={entry.day || 'mon'}
+                            onValueChange={(v) => setScheduleEntries((prev) => prev.map((e, j) => j === i ? { day: v, time: e.time } : e))}
+                          >
+                            <SelectTrigger className="h-7 w-24 text-[11px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {WEEK_DAYS.map((d) => (
+                                <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  'h-7 w-36 justify-between text-[11px] font-normal',
+                                  !entry.date && 'text-zinc-500'
+                                )}
+                              >
+                                {entry.date ? format(new Date(entry.date + 'T12:00:00'), 'dd/MM/yyyy') : 'Selecionar'}
+                                <CalendarIcon size={12} />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent align="start">
+                              <Calendar
+                                mode="single"
+                                selected={entry.date ? new Date(entry.date + 'T12:00:00') : undefined}
+                                onSelect={(date) => {
+                                  if (date) {
+                                    const formatted = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+                                    setScheduleEntries((prev) => prev.map((en, j) => j === i ? { date: formatted, time: en.time } : en))
+                                  }
+                                }}
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        )}
+                        <Input
+                          type="time" style={{ colorScheme: 'dark' }}
+                          value={entry.time}
+                          onChange={(e) => setScheduleEntries((prev) => prev.map((en, j) => j === i ? { ...en, time: e.target.value } : en))}
+                          className="h-7 w-24 text-[11px]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setScheduleEntries((prev) => prev.filter((_, j) => j !== i))}
+                          className="text-zinc-600 hover:text-red-400 transition-colors"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setScheduleEntries((prev) => [
+                    ...prev,
+                    scheduleMode === 'weekly' ? { day: 'mon', time: '09:00' } : { date: '', time: '09:00' },
+                  ])}
+                  className="mt-2 w-full text-xs"
+                >
+                  <Plus size={12} />
+                  Adicionar horario
+                </Button>
+
+                {scheduleEntries.length > 0 && (
+                  <div className="mt-3 space-y-1">
+                    <Label className="text-[10px]">Mover para</Label>
+                    <Combobox
+                      value={nextBlockId}
+                      onValueChange={setNextBlockId}
+                      options={blockOptions}
+                      placeholder="Bloco de destino..."
+                      searchPlaceholder="Filtrar..."
+                      className="h-8 text-xs"
+                    />
+                    {!nextBlockId && (
+                      <p className="text-[10px] text-amber-400 flex items-center gap-1">
+                        <AlertTriangle size={10} /> Selecione o bloco de destino
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {scheduleEntries.length > 0 && (
+                  <div className="mt-2 rounded-md bg-zinc-800/50 px-3 py-2">
+                    <p className="text-[10px] text-zinc-400">
+                      💡 A tarefa fica neste bloco e e movida automaticamente quando o dia/hora bater. Apos completar o fluxo, retorne a tarefa pra ca pra repetir.
+                    </p>
+                  </div>
+                )}
+              </Section>
+
               {/* ── Sem resposta ── */}
               <Section
                 icon={Clock}
@@ -397,7 +599,7 @@ export default function BlockConfigModal({ block, pipeline, open, onClose, onSav
                     <div className="space-y-1">
                       <Label className="text-[10px]">Hora</Label>
                       <Input
-                        type="time"
+                        type="time" style={{ colorScheme: 'dark' }}
                         value={noReplyTime}
                         onChange={(e) => setNoReplyTime(e.target.value)}
                         className="h-8 text-xs"
@@ -512,7 +714,7 @@ export default function BlockConfigModal({ block, pipeline, open, onClose, onSav
                                 <div className="space-y-1">
                                   <Label className="text-[10px]">Hora</Label>
                                   <Input
-                                    type="time"
+                                    type="time" style={{ colorScheme: 'dark' }}
                                     value={retryDaysTime.time}
                                     onChange={(e) => {
                                       const mins = daysTimeToMinutes(retryDaysTime.days, e.target.value)

@@ -132,6 +132,7 @@ export async function scanPipelines(): Promise<OwnerContext[]> {
         const hasMsgDelay = !!(config.msg_delay_minutes);
         const hasNoReply = !!(config.no_reply_minutes && config.no_reply_block_id);
         const hasPrompt = !!((config.prompt as string)?.trim() || (config.message as string)?.trim());
+        const hasSchedule = !!(config.schedule && config.next_block_id);
 
         // Filter tasks:
         // - With timer/no_reply/msg_delay: ALL tasks (check each tick)
@@ -146,6 +147,7 @@ export async function scanPipelines(): Promise<OwnerContext[]> {
           if (hasTimer && !hasPrompt) return true;
           if (hasMsgDelay) return true;
           if (hasNoReply) return true; // Need to check no-reply timer each tick
+          if (hasSchedule) return true; // Need to check schedule each tick
           const processed = tRaw.processedAt as Date | null;
           if (!processed) return true;
           return processed < t.enteredAt;

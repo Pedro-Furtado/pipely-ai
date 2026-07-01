@@ -77,6 +77,7 @@ REGRAS DE COMUNICACAO:
 INSTRUCAO DO USUARIO PARA ESTE BLOCO: "${blockPrompt}"
 
 Siga esta instrucao para gerar as mensagens via WhatsApp.
+IMPORTANTE: Voce esta falando DIRETAMENTE com o responsavel da tarefa. NAO diga "vou avisar ao responsavel" — voce JA esta falando com ele.
 Gere mensagens naturais, amigaveis e profissionais.
 Foque APENAS na tarefa atual. Nao mencione outras tarefas pendentes.
 Quebre em 2-4 mensagens curtas no array "messages" para simular conversa natural.
@@ -127,6 +128,87 @@ export async function processBlock(
       data: { status: autoStatus },
     });
     log.info("PROCESSOR", `Auto-status → ${autoStatus} for ${taskIds.length} task(s)`);
+  }
+
+  // Notify on entry: create in-app notification for the owner
+  if (config.notify_on_entry) {
+    for (const task of tasks) {
+      // Only notify once per task entry (check if not already processed in this block)
+      if (task.processedAt && task.processedAt >= task.enteredAt) continue;
+
+      const existing = await prisma.notification.findFirst({
+        where: {
+          userId: ownerCtx.ownerId,
+          type: "block_entry",
+          data: { path: ["taskId"], equals: task.id },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      // Skip if already notified for this entry
+      if (existing && new Date(existing.createdAt).getTime() >= new Date(task.enteredAt).getTime()) continue;
+
+      await prisma.notification.create({
+        data: {
+          userId: ownerCtx.ownerId,
+          type: "block_entry",
+          title: `Tarefa em "${block.name}"`,
+          message: `"${task.title}" entrou no bloco "${block.name}"`,
+          data: { taskId: task.id, blockId: block.id, blockName: block.name },
+        },
+      });
+      log.info("PROCESSOR", `Notification: task "${task.title}" entered "${block.name}"`);
+    }
+  }
+
+  // Schedule: move tasks when scheduled day/time matches
+  const schedule = config.schedule as { entries?: Array<{ day?: string; date?: string; time: string }> } | undefined;
+  const scheduleNextBlockId = (config.next_block_id as string) || "";
+  if (schedule?.entries?.length && scheduleNextBlockId) {
+    const targetExists = await prisma.pipelineBlock.findUnique({ where: { id: scheduleNextBlockId }, select: { id: true } });
+    if (!targetExists) {
+      log.warn("PROCESSOR", `Schedule target block ${scheduleNextBlockId} not found, skipping`);
+    } else {
+      const now = new Date();
+      const dayNames = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+      const currentDay = dayNames[now.getDay()];
+      const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      const currentDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+      const isScheduleMatch = schedule.entries.some((entry) => {
+        if (entry.time !== currentTime) return false;
+        if (entry.day) return entry.day === currentDay;
+        if (entry.date) return entry.date === currentDate;
+        return false;
+      });
+
+      if (isScheduleMatch) {
+        for (const task of tasks) {
+          // Only move tasks that haven't been moved this minute (prevent double-move)
+          if (task.processedAt) {
+            const processedMinutesAgo = Math.floor((Date.now() - new Date(task.processedAt).getTime()) / 60000);
+            if (processedMinutesAgo < 2) continue;
+          }
+
+          await prisma.taskLog.updateMany({
+            where: { taskId: task.id, leftAt: null },
+            data: { leftAt: new Date() },
+          });
+          await prisma.task.update({
+            where: { id: task.id },
+            data: { blockId: scheduleNextBlockId, enteredAt: new Date(), processedAt: null, retryAt: null },
+          });
+          await prisma.taskLog.create({
+            data: { taskId: task.id, blockId: scheduleNextBlockId },
+          });
+          log.info("PROCESSOR", `Schedule: task "${task.title}" moved (${currentDay} ${currentTime})`);
+          await saveAgentLog(ownerCtx.ownerId, "schedule_advance", `Agendamento — "${task.title}"`, `Movida por agendamento (${currentDay} ${currentTime})`, task.id);
+        }
+        return; // Schedule matched — don't process further
+      }
+    }
+    // Schedule configured but time hasn't matched yet — wait silently
+    return;
   }
 
   // No-reply timer: move tasks that have been processed but got no response

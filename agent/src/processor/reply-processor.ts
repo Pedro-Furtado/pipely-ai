@@ -138,12 +138,12 @@ export async function processReply(event: ReplyEvent): Promise<void> {
 
       const branches = (config.branches as Array<Record<string, unknown>>) || [];
       const branchInfo = branches.length > 0
-        ? `\nROTEAMENTO CONDICIONAL:\n${branches.map((b, i) => {
+        ? `\nROTEAMENTO CONDICIONAL (escolha UM caminho baseado na resposta):\n${branches.map((b, i) => {
             const retryMin = Number(b.retry_minutes) || 0;
             if (retryMin > 0) {
-              return `  Caminho ${i + 1}: "${b.label}" → REPETIR apos ${retryMin} minutos (condicao: ${b.condition}). Use retry_task com retry_minutes=${retryMin}`;
+              return `  Caminho ${i + 1}: "${b.label}" — condicao: "${b.condition}" — acao: retry_task(retry_minutes=${retryMin})`;
             }
-            return `  Caminho ${i + 1}: "${b.label}" → bloco ${b.nextSlug} (condicao: ${b.condition})`;
+            return `  Caminho ${i + 1}: "${b.label}" — condicao: "${b.condition}" — acao: move_task(target_block_id="${b.nextSlug}")`;
           }).join("\n")}`
         : "";
 
@@ -229,10 +229,13 @@ REGRAS DE COMUNICACAO:
       { role: "system", content: systemPrompt },
       { role: "user", content: `O membro respondeu: "${message}".
 
-Passo 1: Releia as mensagens que o agente enviou e identifique o que foi perguntado.
-Passo 2: Interprete a resposta "${message}" no contexto da pergunta.
-Passo 3: Avalie cada condicao dos branches e escolha a que melhor corresponde.
-Passo 4: Execute a acao (move_task ou retry_task) e responda ao membro.` },
+PROCESSO OBRIGATORIO:
+1. O que o agente perguntou? (releia MENSAGENS ENVIADAS)
+2. O que "${message}" significa como resposta a essa pergunta?
+3. Qual condicao dos branches corresponde a essa interpretacao?
+4. Execute SOMENTE a acao do branch escolhido e responda ao membro.
+
+IMPORTANTE: A resposta deve ser interpretada como resposta direta a pergunta feita. Se a pergunta foi "ja finalizou?" e a resposta foi afirmativa, a condicao correspondente e a de finalizacao, NAO a de "ainda nao".` },
     ];
 
     log.info("REPLY", `Processing reply for ${ownerTasks.length} task(s) of member ${member.name}`);
