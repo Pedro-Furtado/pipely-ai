@@ -2,12 +2,13 @@
 
 import { createInterface } from "node:readline/promises";
 import { createServer as createNetServer } from "node:net";
-import { randomBytes } from "node:crypto";
-import { execSync } from "node:child_process";
-import { writeFileSync, readFileSync, existsSync } from "node:fs";
+import { randomBytes, randomUUID } from "node:crypto";
+import { execSync, fork } from "node:child_process";
+import { writeFileSync, readFileSync, existsSync, mkdirSync, unlinkSync, rmSync, createWriteStream } from "node:fs";
 import { join } from "node:path";
 import { platform, release, arch } from "node:os";
 import http from "node:http";
+import https from "node:https";
 
 // ── ANSI Colors ──────────────────────────────────────
 
@@ -455,7 +456,6 @@ const BUNDLE_NAME = "pipely-local.tar.gz";
 async function getLatestReleaseUrl() {
   return new Promise((resolve) => {
     const url = `https://api.github.com/repos/${BUNDLE_REPO}/releases/latest`;
-    const https = require("node:https");
     https.get(url, { headers: { "User-Agent": "pipely-cli" } }, (res) => {
       let body = "";
       res.on("data", (chunk) => (body += chunk));
@@ -474,9 +474,6 @@ async function getLatestReleaseUrl() {
 
 async function downloadFile(url, dest) {
   return new Promise((resolve, reject) => {
-    const https = require("node:https");
-    const fs = require("node:fs");
-
     function follow(url) {
       https.get(url, { headers: { "User-Agent": "pipely-cli" } }, (res) => {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
@@ -487,7 +484,7 @@ async function downloadFile(url, dest) {
           reject(new Error(`HTTP ${res.statusCode}`));
           return;
         }
-        const file = fs.createWriteStream(dest);
+        const file = createWriteStream(dest);
         res.pipe(file);
         file.on("finish", () => { file.close(); resolve(); });
       }).on("error", reject);
@@ -498,16 +495,8 @@ async function downloadFile(url, dest) {
 }
 
 function extractTarGz(file, dest) {
-  const { mkdirSync } = require("node:fs");
   mkdirSync(dest, { recursive: true });
-
-  const os = detectOS();
-  if (os.platform === "win32") {
-    // Windows: use tar (available since Windows 10)
-    execSync(`tar -xzf "${file}" -C "${dest}"`, { stdio: "pipe" });
-  } else {
-    execSync(`tar -xzf "${file}" -C "${dest}"`, { stdio: "pipe" });
-  }
+  execSync(`tar -xzf "${file}" -C "${dest}"`, { stdio: "pipe" });
 }
 
 function getLocalEnvPath() {
@@ -520,7 +509,7 @@ function isLocalInstalled() {
 
 function generateLocalEnv() {
   const jwtSecret = generateKey(64);
-  const setupKey = require("node:crypto").randomUUID();
+  const setupKey = randomUUID();
 
   const env = `# Pipely AI — Local Mode
 DATABASE_URL=file:./data/pipely.db
@@ -564,8 +553,7 @@ async function installLocal() {
   console.log(`${c.green}✓${c.reset}`);
 
   const tmpFile = join(PIPELY_DIR, BUNDLE_NAME);
-  const { mkdirSync: mk } = require("node:fs");
-  mk(PIPELY_DIR, { recursive: true });
+  mkdirSync(PIPELY_DIR, { recursive: true });
 
   process.stdout.write(`  Baixando bundle... `);
   try {
@@ -589,7 +577,7 @@ async function installLocal() {
   }
 
   // Clean up tar
-  try { require("node:fs").unlinkSync(tmpFile); } catch {}
+  try { unlinkSync(tmpFile); } catch {}
 
   // Install deps
   console.log(`\n  ${c.magenta}── Instalando dependencias ────────────────${c.reset}\n`);
@@ -611,7 +599,7 @@ async function installLocal() {
   console.log(`  ${c.green}✓${c.reset} .env gerado`);
 
   // Create data directory
-  mk(join(PIPELY_DIR, "data"), { recursive: true });
+  mkdirSync(join(PIPELY_DIR, "data"), { recursive: true });
 
   // Setup database
   process.stdout.write(`  Criando banco de dados... `);
@@ -652,7 +640,6 @@ async function runLocal() {
 
   console.log(`  ${c.magenta}── Iniciando Pipely AI ────────────────────${c.reset}\n`);
 
-  const { fork } = require("node:child_process");
   const envPath = getLocalEnvPath();
   const envContent = existsSync(envPath) ? readFileSync(envPath, "utf-8") : "";
   const envVars = {};
@@ -1220,8 +1207,7 @@ switch (command) {
   case "update":
     if (local) {
       // Delete and re-download bundle
-      const { rmSync: rm } = require("node:fs");
-      try { rm(PIPELY_DIR, { recursive: true }); } catch {}
+      try { rmSync(PIPELY_DIR, { recursive: true }); } catch {}
       console.log(`\n  ${c.dim}Reinstalando...${c.reset}\n`);
       installLocal().catch((err) => {
         console.error(`\n  ${c.red}Erro: ${err.message}${c.reset}\n`);
