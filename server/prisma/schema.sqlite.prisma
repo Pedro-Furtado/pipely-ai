@@ -1,0 +1,200 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── AUTH (OWNER ONLY) ──────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  phone     String?
+  isOwner   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens RefreshToken[]
+  pipelines     Pipeline[]
+  whatsapp      WhatsAppConfig?
+  aiConfig      AiConfig?
+  notifications Notification[]
+  teamMembers   TeamMember[]
+  agentLogs     AgentLog[] @relation("AgentLogOwner")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// ─── AI CONFIG ───────────────────────────────────────────────────────────────
+
+model AiConfig {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  openaiApiKey String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ─── WHATSAPP (EVOLUTION GO) ──────────────────────────────────────────────────
+
+model WhatsAppConfig {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serverUrl    String
+  globalApiKey String
+  webhookUrl   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ─── NOTIFICAÇÕES ────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  message   String
+  data      String   @default("{}")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// ─── TIME (TEAM) ─────────────────────────────────────────────────────────────
+
+model TeamMember {
+  id        String   @id @default(uuid())
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name      String
+  phone     String
+  remoteJid String?
+  role      String   @default("member")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tasksAssigned Task[]
+
+  @@unique([ownerId, phone])
+}
+
+// ─── TAREFAS ─────────────────────────────────────────────────────────────────
+
+model Task {
+  id          String         @id @default(uuid())
+  ownerId     String
+  assigneeId  String?
+  assignee    TeamMember?    @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+  blockId     String?
+  block       PipelineBlock? @relation(fields: [blockId], references: [id], onDelete: SetNull)
+  title       String
+  description String?
+  priority    String         @default("medium")
+  status      String         @default("todo")
+  enteredAt   DateTime       @default(now())
+  processedAt DateTime?
+  retryAt     DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  logs TaskLog[]
+}
+
+model TaskLog {
+  id        String         @id @default(uuid())
+  taskId    String
+  task      Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  blockId   String?
+  block     PipelineBlock? @relation(fields: [blockId], references: [id], onDelete: SetNull)
+  enteredAt DateTime       @default(now())
+  leftAt    DateTime?
+}
+
+// ─── PIPELINE ────────────────────────────────────────────────────────────────
+
+model Pipeline {
+  id        String   @id @default(uuid())
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  phases PipelinePhase[]
+}
+
+model PipelinePhase {
+  id         String   @id @default(uuid())
+  pipelineId String
+  pipeline   Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  name       String
+  color      String   @default("blue")
+  position   Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  blocks PipelineBlock[]
+}
+
+model PipelineBlock {
+  id        String        @id @default(uuid())
+  phaseId   String
+  phase     PipelinePhase @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  name      String
+  slug      String
+  blockType String        @default("stage")
+  config    String        @default("{}")
+  position  Int
+  isLocked  Boolean       @default(false)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  tasks       Task[]
+  taskLogs    TaskLog[]
+  automations PipelineAutomation[]
+
+  @@unique([phaseId, slug])
+}
+
+// ─── AGENT LOGS ──────────────────────────────────────────────────────────────
+
+model AgentLog {
+  id        String   @id @default(uuid())
+  ownerId   String
+  owner     User     @relation("AgentLogOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  taskId    String?
+  type      String
+  title     String
+  detail    String?
+  data      String   @default("{}")
+  createdAt DateTime @default(now())
+}
+
+// ─── AUTOMAÇÕES ──────────────────────────────────────────────────────────────
+
+model PipelineAutomation {
+  id           String        @id @default(uuid())
+  blockId      String
+  block        PipelineBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  type         String
+  config       String        @default("{}")
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}

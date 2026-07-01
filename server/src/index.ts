@@ -59,6 +59,16 @@ app.get("/health", (_req, res) => {
   res.json({ success: true, message: "Server is running" });
 });
 
+// Serve frontend static files in local mode (no nginx)
+if (process.env.SERVE_FRONTEND) {
+  const path = await import("path");
+  const frontendPath = path.resolve(process.env.SERVE_FRONTEND);
+  app.use(express.static(frontendPath));
+  app.get(/^\/(?!api|health).*/, (_req, res) => {
+    res.sendFile(path.join(frontendPath, "index.html"));
+  });
+}
+
 app.use(
   (
     err: unknown,

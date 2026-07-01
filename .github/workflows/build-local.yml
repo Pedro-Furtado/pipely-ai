@@ -1,0 +1,104 @@
+name: Build Local Bundle
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-bundle:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install root deps
+        run: npm ci
+
+      - name: Install server deps
+        run: cd server && npm ci
+
+      - name: Install agent deps
+        run: cd agent && npm ci
+
+      - name: Build frontend
+        run: npx vite build
+
+      - name: Setup SQLite schema
+        run: |
+          cp server/prisma/schema.sqlite.prisma server/prisma/schema.prisma
+          cd server && npx prisma generate
+
+      - name: Compile server
+        run: cd server && npx tsc --outDir dist-compiled || true
+
+      - name: Compile agent
+        run: cd agent && npx tsc --outDir dist-compiled || true
+
+      - name: Create bundle
+        run: |
+          mkdir -p bundle/frontend bundle/server/prisma bundle/server/dist bundle/server/generated bundle/agent/dist
+
+          # Frontend
+          cp -r dist/* bundle/frontend/
+
+          # Server
+          cp -r server/dist-compiled/* bundle/server/dist/ 2>/dev/null || true
+          cp server/prisma/schema.prisma bundle/server/prisma/
+          cp -r server/generated bundle/server/
+
+          # Agent
+          cp -r agent/dist-compiled/* bundle/agent/dist/ 2>/dev/null || true
+
+          # Package.json for npm install
+          cat > bundle/package.json << 'PKGJSON'
+          {
+            "name": "pipely-local",
+            "version": "1.0.0",
+            "type": "module",
+            "private": true,
+            "dependencies": {
+              "@prisma/client": "^7.0.0",
+              "prisma": "^7.0.0",
+              "bcryptjs": "^3.0.2",
+              "cors": "^2.8.5",
+              "cookie-parser": "^1.4.7",
+              "dotenv": "^16.4.7",
+              "express": "^5.1.0",
+              "express-rate-limit": "^7.5.0",
+              "helmet": "^8.1.0",
+              "jsonwebtoken": "^9.0.2",
+              "openai": "^5.8.2"
+            }
+          }
+          PKGJSON
+
+          # Start script marker
+          cat > bundle/start.mjs << 'EOF'
+          #!/usr/bin/env node
+          console.log("Use: npx pipely-ai start");
+          EOF
+
+          # Create tar.gz
+          cd bundle && tar -czf ../pipely-local.tar.gz .
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: pipely-local.tar.gz
+
+      - name: Upload artifact (for testing)
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipely-local
+          path: pipely-local.tar.gz

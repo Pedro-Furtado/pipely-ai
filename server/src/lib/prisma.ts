@@ -1,11 +1,24 @@
-import pg from "pg";
-import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../../generated/prisma/client.js";
 
-const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+const databaseUrl = process.env.DATABASE_URL || "";
+const isSQLite = databaseUrl.startsWith("file:");
 
-const adapter = new PrismaPg(pool);
+let prisma: PrismaClient;
 
-export const prisma = new PrismaClient({ adapter });
+if (isSQLite) {
+  // SQLite: no adapter needed
+  prisma = new PrismaClient();
+} else {
+  // PostgreSQL: use pg adapter
+  const pg = await import("pg");
+  const { PrismaPg } = await import("@prisma/adapter-pg");
+
+  const pool = new pg.default.Pool({
+    connectionString: databaseUrl,
+  });
+
+  const adapter = new PrismaPg(pool);
+  prisma = new PrismaClient({ adapter });
+}
+
+export { prisma };

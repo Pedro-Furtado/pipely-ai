@@ -446,6 +446,274 @@ function printDockerHelp(os) {
   }
 }
 
+// ── Local Mode ──────────────────────────────────────
+
+const PIPELY_DIR = join(process.env.HOME || process.env.USERPROFILE || ".", ".pipely");
+const BUNDLE_REPO = "Pedro-Furtado/pipely-ai";
+const BUNDLE_NAME = "pipely-local.tar.gz";
+
+async function getLatestReleaseUrl() {
+  return new Promise((resolve) => {
+    const url = `https://api.github.com/repos/${BUNDLE_REPO}/releases/latest`;
+    const https = require("node:https");
+    https.get(url, { headers: { "User-Agent": "pipely-cli" } }, (res) => {
+      let body = "";
+      res.on("data", (chunk) => (body += chunk));
+      res.on("end", () => {
+        try {
+          const release = JSON.parse(body);
+          const asset = (release.assets || []).find((a) => a.name === BUNDLE_NAME);
+          resolve(asset?.browser_download_url || null);
+        } catch {
+          resolve(null);
+        }
+      });
+    }).on("error", () => resolve(null));
+  });
+}
+
+async function downloadFile(url, dest) {
+  return new Promise((resolve, reject) => {
+    const https = require("node:https");
+    const fs = require("node:fs");
+
+    function follow(url) {
+      https.get(url, { headers: { "User-Agent": "pipely-cli" } }, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          follow(res.headers.location);
+          return;
+        }
+        if (res.statusCode !== 200) {
+          reject(new Error(`HTTP ${res.statusCode}`));
+          return;
+        }
+        const file = fs.createWriteStream(dest);
+        res.pipe(file);
+        file.on("finish", () => { file.close(); resolve(); });
+      }).on("error", reject);
+    }
+
+    follow(url);
+  });
+}
+
+function extractTarGz(file, dest) {
+  const { mkdirSync } = require("node:fs");
+  mkdirSync(dest, { recursive: true });
+
+  const os = detectOS();
+  if (os.platform === "win32") {
+    // Windows: use tar (available since Windows 10)
+    execSync(`tar -xzf "${file}" -C "${dest}"`, { stdio: "pipe" });
+  } else {
+    execSync(`tar -xzf "${file}" -C "${dest}"`, { stdio: "pipe" });
+  }
+}
+
+function getLocalEnvPath() {
+  return join(PIPELY_DIR, ".env");
+}
+
+function isLocalInstalled() {
+  return existsSync(join(PIPELY_DIR, "start.mjs")) && existsSync(join(PIPELY_DIR, "package.json"));
+}
+
+function generateLocalEnv() {
+  const jwtSecret = generateKey(64);
+  const setupKey = require("node:crypto").randomUUID();
+
+  const env = `# Pipely AI — Local Mode
+DATABASE_URL=file:./data/pipely.db
+JWT_SECRET=${jwtSecret}
+OWNER_SETUP_KEY=${setupKey}
+FRONTEND_URL=http://localhost:3000
+BACKEND_URL=http://localhost:3333
+POLL_INTERVAL_MS=60000
+PORT=3333
+VITE_API_URL=http://localhost:3333
+`;
+  return { env, setupKey };
+}
+
+async function installLocal() {
+  printBanner();
+
+  const os = detectOS();
+  console.log(`  Sistema: ${c.bold}${os.label}${c.reset} (${os.arch})`);
+  console.log(`  Modo: ${c.cyan}Local (sem Docker)${c.reset}\n`);
+
+  // Check if already installed
+  if (isLocalInstalled()) {
+    console.log(`  ${c.green}✓${c.reset} Pipely AI ja instalado em ${c.dim}${PIPELY_DIR}${c.reset}\n`);
+    console.log(`  Iniciando...\n`);
+    return runLocal();
+  }
+
+  // Download bundle
+  console.log(`  ${c.magenta}── Baixando Pipely AI ─────────────────────${c.reset}\n`);
+
+  process.stdout.write(`  Buscando ultima versao... `);
+  const bundleUrl = await getLatestReleaseUrl();
+
+  if (!bundleUrl) {
+    console.log(`${c.red}✗${c.reset}`);
+    console.log(`\n  ${c.red}Bundle nao encontrado no GitHub Releases.${c.reset}`);
+    console.log(`  ${c.dim}Verifique: https://github.com/${BUNDLE_REPO}/releases${c.reset}\n`);
+    process.exit(1);
+  }
+  console.log(`${c.green}✓${c.reset}`);
+
+  const tmpFile = join(PIPELY_DIR, BUNDLE_NAME);
+  const { mkdirSync: mk } = require("node:fs");
+  mk(PIPELY_DIR, { recursive: true });
+
+  process.stdout.write(`  Baixando bundle... `);
+  try {
+    await downloadFile(bundleUrl, tmpFile);
+    console.log(`${c.green}✓${c.reset}`);
+  } catch (err) {
+    console.log(`${c.red}✗${c.reset}`);
+    console.log(`  ${c.red}Erro: ${err.message}${c.reset}\n`);
+    process.exit(1);
+  }
+
+  // Extract
+  process.stdout.write(`  Extraindo... `);
+  try {
+    extractTarGz(tmpFile, PIPELY_DIR);
+    console.log(`${c.green}✓${c.reset}`);
+  } catch (err) {
+    console.log(`${c.red}✗${c.reset}`);
+    console.log(`  ${c.red}Erro: ${err.message}${c.reset}\n`);
+    process.exit(1);
+  }
+
+  // Clean up tar
+  try { require("node:fs").unlinkSync(tmpFile); } catch {}
+
+  // Install deps
+  console.log(`\n  ${c.magenta}── Instalando dependencias ────────────────${c.reset}\n`);
+  try {
+    execSync("npm install --production --no-fund --no-audit", {
+      cwd: PIPELY_DIR,
+      stdio: "inherit",
+    });
+    console.log(`\n  ${c.green}✓${c.reset} Dependencias instaladas`);
+  } catch {
+    console.log(`\n  ${c.red}✗ Erro ao instalar dependencias${c.reset}\n`);
+    process.exit(1);
+  }
+
+  // Generate .env
+  console.log(`\n  ${c.magenta}── Configurando ───────────────────────────${c.reset}\n`);
+  const { env: envContent, setupKey } = generateLocalEnv();
+  writeFileSync(getLocalEnvPath(), envContent);
+  console.log(`  ${c.green}✓${c.reset} .env gerado`);
+
+  // Create data directory
+  mk(join(PIPELY_DIR, "data"), { recursive: true });
+
+  // Setup database
+  process.stdout.write(`  Criando banco de dados... `);
+  try {
+    execSync("npx prisma db push --skip-generate", {
+      cwd: join(PIPELY_DIR, "server"),
+      stdio: "pipe",
+      env: { ...process.env, DATABASE_URL: `file:${join(PIPELY_DIR, "data/pipely.db")}` },
+    });
+    console.log(`${c.green}✓${c.reset}`);
+  } catch (err) {
+    console.log(`${c.red}✗${c.reset}`);
+    console.log(`  ${c.dim}${err.message}${c.reset}`);
+  }
+
+  console.log(`\n  ${c.green}✓${c.reset} Instalacao concluida\n`);
+
+  // Print summary and run
+  const line = "═".repeat(56);
+  console.log(`  ${c.green}${line}${c.reset}`);
+  console.log(`  ${c.green}${c.bold}  PIPELY AI — LOCAL MODE${c.reset}`);
+  console.log(`  ${c.green}${line}${c.reset}`);
+  console.log("");
+  console.log(`  ${c.bold}Setup Key:${c.reset}       ${c.yellow}${setupKey}${c.reset}`);
+  console.log("");
+  console.log(`  ${c.bold}Diretorio:${c.reset}       ${c.dim}${PIPELY_DIR}${c.reset}`);
+  console.log(`  ${c.bold}Banco de dados:${c.reset}  ${c.dim}${join(PIPELY_DIR, "data/pipely.db")}${c.reset}`);
+  console.log("");
+
+  return runLocal();
+}
+
+async function runLocal() {
+  if (!isLocalInstalled()) {
+    console.log(`  ${c.red}✗ Pipely AI nao instalado. Execute: npx pipely-ai${c.reset}\n`);
+    process.exit(1);
+  }
+
+  console.log(`  ${c.magenta}── Iniciando Pipely AI ────────────────────${c.reset}\n`);
+
+  const { fork } = require("node:child_process");
+  const envPath = getLocalEnvPath();
+  const envContent = existsSync(envPath) ? readFileSync(envPath, "utf-8") : "";
+  const envVars = {};
+  for (const line of envContent.split("\n")) {
+    const match = line.match(/^([A-Z_]+)=(.*)$/);
+    if (match) envVars[match[1]] = match[2];
+  }
+
+  const childEnv = { ...process.env, ...envVars };
+
+  // Start server
+  const server = fork(join(PIPELY_DIR, "server/dist/index.js"), [], {
+    cwd: join(PIPELY_DIR, "server"),
+    env: { ...childEnv, PORT: "3333" },
+    stdio: "inherit",
+  });
+
+  // Start agent
+  const agent = fork(join(PIPELY_DIR, "agent/dist/index.js"), [], {
+    cwd: join(PIPELY_DIR, "agent"),
+    env: { ...childEnv, PORT: "3335" },
+    stdio: "inherit",
+  });
+
+  // Serve frontend
+  const frontendDir = join(PIPELY_DIR, "frontend");
+  if (existsSync(frontendDir)) {
+    const express = await import("express").catch(() => null);
+    if (express) {
+      const app = express.default();
+      app.use(express.default.static(frontendDir));
+      app.get(/^\/(?!api|health).*/, (_req, res) => {
+        res.sendFile(join(frontendDir, "index.html"));
+      });
+      const fPort = envVars.FRONTEND_PORT || 3000;
+      app.listen(fPort, () => {
+        console.log(`  ${c.cyan}Frontend:${c.reset}  http://localhost:${fPort}`);
+        console.log(`  ${c.cyan}Backend:${c.reset}   http://localhost:3333`);
+        console.log(`  ${c.cyan}Agent:${c.reset}     http://localhost:3335`);
+        console.log("");
+        console.log(`  Pressione ${c.bold}Ctrl+C${c.reset} para parar.\n`);
+      });
+    }
+  }
+
+  function shutdown() {
+    console.log(`\n  Parando...\n`);
+    server.kill();
+    agent.kill();
+    process.exit(0);
+  }
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+  server.on("exit", (code) => { if (code) { agent.kill(); process.exit(1); } });
+  agent.on("exit", (code) => { if (code) { server.kill(); process.exit(1); } });
+
+  // Keep process alive
+  await new Promise(() => {});
+}
+
 // ── Banner ──────────────────────────────────────────
 
 function printBanner() {
@@ -697,28 +965,27 @@ async function install() {
 
   process.stdout.write(`  Verificando Docker... `);
   const docker = checkDocker();
+
   if (!docker.ok) {
-    printDockerHelp(os);
-    process.exit(1);
+    console.log(`${c.yellow}✗ Nao encontrado${c.reset}`);
+    console.log(`\n  Docker nao detectado. Iniciando em ${c.cyan}modo local${c.reset} (SQLite, sem containers).\n`);
+    return installLocal();
   }
   console.log(`${c.green}✓${c.reset} v${docker.version}`);
 
   const composeCmd = getComposeCmd();
   if (!composeCmd) {
-    console.log(`\n  ${c.red}✗ Docker Compose nao encontrado${c.reset}\n`);
-    process.exit(1);
+    console.log(`\n  ${c.yellow}✗ Docker Compose nao encontrado${c.reset}`);
+    console.log(`  Iniciando em ${c.cyan}modo local${c.reset}.\n`);
+    return installLocal();
   }
 
   try {
     execSync("docker info", { stdio: "pipe" });
   } catch {
-    console.log(`\n  ${c.red}✗ Docker nao esta rodando${c.reset}`);
-    if (os.platform === "win32" || os.platform === "darwin") {
-      console.log(`  Abra o Docker Desktop e tente novamente.\n`);
-    } else {
-      console.log(`  Execute: sudo systemctl start docker\n`);
-    }
-    process.exit(1);
+    console.log(`\n  ${c.yellow}✗ Docker nao esta rodando${c.reset}`);
+    console.log(`  Iniciando em ${c.cyan}modo local${c.reset}.\n`);
+    return installLocal();
   }
 
   console.log("");
@@ -878,30 +1145,85 @@ async function install() {
 // ── ROUTER ───────────────────────────────────────────
 // ══════════════════════════════════════════════════════
 
+// ── Local-mode commands ─────────────────────────────
+
+function cmdLocalKeys() {
+  if (!isLocalInstalled()) {
+    console.log(`\n  ${c.red}✗ Pipely AI nao instalado localmente${c.reset}\n`);
+    process.exit(1);
+  }
+  const env = readEnvFile(PIPELY_DIR);
+  console.log("");
+  console.log(`  ${c.bold}PIPELY AI — Chaves (Local)${c.reset}\n`);
+  if (env.OWNER_SETUP_KEY) {
+    console.log(`  Setup Key:   ${c.yellow}${env.OWNER_SETUP_KEY}${c.reset}`);
+  }
+  if (env.JWT_SECRET) {
+    console.log(`  JWT Secret:  ${c.yellow}${env.JWT_SECRET.slice(0, 16)}...${c.reset}`);
+  }
+  console.log(`\n  Diretorio:   ${c.dim}${PIPELY_DIR}${c.reset}`);
+  console.log("");
+}
+
+function cmdLocalStart() {
+  if (!isLocalInstalled()) {
+    console.log(`\n  ${c.red}✗ Pipely AI nao instalado. Execute: npx pipely-ai${c.reset}\n`);
+    process.exit(1);
+  }
+  runLocal().catch((err) => {
+    console.error(`\n  ${c.red}Erro: ${err.message}${c.reset}\n`);
+    process.exit(1);
+  });
+}
+
+function isLocalMode() {
+  // Local mode if: local install exists AND no Docker project found
+  return isLocalInstalled() && !findProjectDir();
+}
+
+// ══════════════════════════════════════════════════════
+// ── ROUTER ───────────────────────────────────────────
+// ══════════════════════════════════════════════════════
+
 const args = process.argv.slice(2);
 const command = args[0];
+const local = isLocalMode();
 
 switch (command) {
   case "status":
-    cmdStatus();
+    if (local) { cmdLocalKeys(); } else { cmdStatus(); }
     break;
   case "keys":
-    cmdKeys();
+    if (local) { cmdLocalKeys(); } else { cmdKeys(); }
     break;
   case "logs":
-    cmdLogs(args[1]);
+    if (local) { console.log(`\n  ${c.dim}Logs aparecem no terminal ao iniciar com: npx pipely-ai start${c.reset}\n`); }
+    else { cmdLogs(args[1]); }
     break;
   case "stop":
-    cmdStop();
+    if (local) { console.log(`\n  ${c.dim}Pressione Ctrl+C no terminal onde esta rodando${c.reset}\n`); }
+    else { cmdStop(); }
     break;
   case "start":
-    cmdStart();
+    if (local) { cmdLocalStart(); } else { cmdStart(); }
     break;
   case "restart":
-    cmdRestart();
+    if (local) { console.log(`\n  ${c.dim}Pressione Ctrl+C e rode novamente: npx pipely-ai start${c.reset}\n`); }
+    else { cmdRestart(); }
     break;
   case "update":
-    cmdUpdate();
+    if (local) {
+      // Delete and re-download bundle
+      const { rmSync: rm } = require("node:fs");
+      try { rm(PIPELY_DIR, { recursive: true }); } catch {}
+      console.log(`\n  ${c.dim}Reinstalando...${c.reset}\n`);
+      installLocal().catch((err) => {
+        console.error(`\n  ${c.red}Erro: ${err.message}${c.reset}\n`);
+        process.exit(1);
+      });
+    } else {
+      cmdUpdate();
+    }
     break;
   case "help":
   case "--help":
