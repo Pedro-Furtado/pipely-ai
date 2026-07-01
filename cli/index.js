@@ -271,6 +271,7 @@ services:
       - POLL_INTERVAL_MS=\${POLL_INTERVAL_MS:-60000}
       - EVOLUTION_SERVER_URL=http://evolution:8080
       - EVOLUTION_API_KEY=\${EVOLUTION_API_KEY}
+      - EVOLUTION_PORT=\${EVOLUTION_PORT:-${ports.evolution}}
       - NODE_ENV=production
     ports:
       - "\${FRONTEND_PORT:-${ports.frontend}}:80"
