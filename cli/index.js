@@ -511,8 +511,9 @@ function generateLocalEnv() {
   const jwtSecret = generateKey(64);
   const setupKey = randomUUID();
 
+  const dbPath = join(PIPELY_DIR, "data", "pipely.db").replace(/\\/g, "/");
   const env = `# Pipely AI — Local Mode
-DATABASE_URL=file:./data/pipely.db
+DATABASE_URL=file:${dbPath}
 JWT_SECRET=${jwtSecret}
 OWNER_SETUP_KEY=${setupKey}
 FRONTEND_URL=http://localhost:3000

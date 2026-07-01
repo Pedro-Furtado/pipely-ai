@@ -6,10 +6,11 @@ const isSQLite = databaseUrl.startsWith("file:");
 let prisma: PrismaClient;
 
 if (isSQLite) {
-  const { createClient } = await import("@libsql/client");
-  const { PrismaLibSQL } = await import("@prisma/adapter-libsql");
+  const libsql = await import("@libsql/client");
+  const adapterMod = await import("@prisma/adapter-libsql");
+  const PrismaLibSQL = adapterMod.PrismaLibSQL || adapterMod.default;
 
-  const client = createClient({ url: databaseUrl });
+  const client = libsql.createClient({ url: databaseUrl });
   const adapter = new PrismaLibSQL(client);
   prisma = new PrismaClient({ adapter } as any);
 } else {
