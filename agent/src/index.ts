@@ -93,7 +93,6 @@ async function handleWebhook(body: Record<string, unknown>): Promise<void> {
 async function resolveAndProcess(remoteJid: string, text: string, instanceName: string): Promise<void> {
   log.info(TAG, `Message from ${remoteJid.substring(0, 8)}...: "${text.substring(0, 80)}"`);
 
-
   const configs = await prisma.whatsAppConfig.findMany();
   let ownerServerUrl = "";
   let ownerInstanceToken = "";
@@ -112,6 +111,13 @@ async function resolveAndProcess(remoteJid: string, text: string, instanceName: 
         : instances.find((i) => i.connected) || instances[0];
 
       if (match) {
+        // Check if message is from the instance's own number (owner sending from phone)
+        const ownerJid = String(match.ownerJid || match.owner || "");
+        if (ownerJid && remoteJid === ownerJid) {
+          log.info(TAG, `Ignoring message from instance owner (${remoteJid.substring(0, 8)}...)`);
+          return;
+        }
+
         ownerServerUrl = config.serverUrl;
         ownerInstanceToken = String(match.token || config.globalApiKey);
         break;

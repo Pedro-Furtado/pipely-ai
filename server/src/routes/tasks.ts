@@ -2,19 +2,17 @@ import { Router, Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
 import { logger } from "../lib/logger.js";
 import { authenticate } from "../middleware/auth.js";
-import { resolveWorkspace } from "../middleware/workspace.js";
 
 const router = Router();
 router.use(authenticate);
-router.use(resolveWorkspace);
 
 // GET /api/tasks
 router.get("/", async (req: Request, res: Response) => {
   try {
     const tasks = await prisma.task.findMany({
-      where: { creatorId: req.ownerId },
+      where: { ownerId: req.userId },
       include: {
-        assignee: { select: { id: true, name: true, email: true } },
+        assignee: { select: { id: true, name: true, phone: true } },
         block: { select: { id: true, name: true, phase: { select: { name: true, color: true } } } },
       },
       orderBy: { createdAt: "desc" },
@@ -37,13 +35,13 @@ router.post("/", async (req: Request, res: Response) => {
       return;
     }
 
-    // Validate assignee is a team member or the owner
-    if (assigneeId && assigneeId !== req.ownerId) {
+    // Validate assignee is a team member
+    if (assigneeId) {
       const isMember = await prisma.teamMember.findFirst({
-        where: { ownerId: req.ownerId, userId: assigneeId, status: "accepted" },
+        where: { id: assigneeId, ownerId: req.userId },
       });
       if (!isMember) {
-        res.status(400).json({ success: false, message: "Assignee is not a team member" });
+        res.status(400).json({ success: false, message: "Responsavel nao encontrado no time" });
         return;
       }
     }
@@ -54,7 +52,7 @@ router.post("/", async (req: Request, res: Response) => {
         where: { id: blockId },
         include: { phase: { include: { pipeline: true } } },
       });
-      if (!block || block.phase.pipeline.ownerId !== req.ownerId) {
+      if (!block || block.phase.pipeline.ownerId !== req.userId) {
         res.status(400).json({ success: false, message: "Block not found" });
         return;
       }
@@ -62,7 +60,7 @@ router.post("/", async (req: Request, res: Response) => {
 
     const task = await prisma.task.create({
       data: {
-        creatorId: req.ownerId,
+        ownerId: req.userId,
         title: title.trim(),
         description: description?.trim() || null,
         priority: priority || "medium",
@@ -71,7 +69,7 @@ router.post("/", async (req: Request, res: Response) => {
         blockId: blockId || null,
       },
       include: {
-        assignee: { select: { id: true, name: true, email: true } },
+        assignee: { select: { id: true, name: true, phone: true } },
         block: { select: { id: true, name: true, phase: { select: { name: true, color: true } } } },
       },
     });
@@ -97,7 +95,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
     const { title, description, priority, assigneeId, blockId, status } = req.body;
 
     const task = await prisma.task.findFirst({
-      where: { id: req.params.id, creatorId: req.ownerId },
+      where: { id: req.params.id, ownerId: req.userId },
     });
 
     if (!task) {
@@ -106,12 +104,12 @@ router.patch("/:id", async (req: Request, res: Response) => {
     }
 
     // Validate assignee
-    if (assigneeId && assigneeId !== req.ownerId) {
+    if (assigneeId) {
       const isMember = await prisma.teamMember.findFirst({
-        where: { ownerId: req.ownerId, userId: assigneeId, status: "accepted" },
+        where: { id: assigneeId, ownerId: req.userId },
       });
       if (!isMember) {
-        res.status(400).json({ success: false, message: "Assignee is not a team member" });
+        res.status(400).json({ success: false, message: "Responsavel nao encontrado no time" });
         return;
       }
     }
@@ -122,7 +120,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
         where: { id: blockId },
         include: { phase: { include: { pipeline: true } } },
       });
-      if (!block || block.phase.pipeline.ownerId !== req.ownerId) {
+      if (!block || block.phase.pipeline.ownerId !== req.userId) {
         res.status(400).json({ success: false, message: "Block not found" });
         return;
       }
@@ -133,14 +131,22 @@ router.patch("/:id", async (req: Request, res: Response) => {
     if (description !== undefined) data.description = description?.trim() || null;
     if (priority !== undefined) data.priority = priority;
     if (assigneeId !== undefined) data.assigneeId = assigneeId || null;
-    if (blockId !== undefined) data.blockId = blockId || null;
+    if (blockId !== undefined) {
+      data.blockId = blockId || null;
+      // Reset processing state when block changes so agent picks it up again
+      if (blockId && blockId !== task.blockId) {
+        data.processedAt = null;
+        data.retryAt = null;
+        data.enteredAt = new Date();
+      }
+    }
     if (status !== undefined) data.status = status;
 
     const updated = await prisma.task.update({
       where: { id: task.id },
       data,
       include: {
-        assignee: { select: { id: true, name: true, email: true } },
+        assignee: { select: { id: true, name: true, phone: true } },
         block: { select: { id: true, name: true, phase: { select: { name: true, color: true } } } },
       },
     });
@@ -156,7 +162,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
 router.delete("/:id", async (req: Request, res: Response) => {
   try {
     const deleted = await prisma.task.deleteMany({
-      where: { id: req.params.id, creatorId: req.ownerId },
+      where: { id: req.params.id, ownerId: req.userId },
     });
 
     if (deleted.count === 0) {

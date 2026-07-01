@@ -22,37 +22,3 @@ export async function generateRefreshToken(userId: string): Promise<string> {
 
   return token;
 }
-
-export async function generateEmailVerificationToken(
-  userId: string
-): Promise<string> {
-  const token = crypto.randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
-  await prisma.emailVerificationToken.create({
-    data: {
-      token,
-      userId,
-      expiresAt,
-    },
-  });
-
-  return token;
-}
-
-export async function generatePasswordResetToken(
-  userId: string
-): Promise<string> {
-  const token = crypto.randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-
-  await prisma.passwordResetToken.create({
-    data: {
-      token,
-      userId,
-      expiresAt,
-    },
-  });
-
-  return token;
-}

@@ -1,8 +1,6 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { toast } from 'sonner'
 import { Plus, Trash2, ClipboardList, AlertTriangle, CircleDot, Clock, CheckCircle2 } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
-import { useWorkspace } from '@/contexts/WorkspaceContext'
 import { taskService, type Task } from '@/services/tasks'
 import { teamService, type TeamMember } from '@/services/team'
 import { pipelineService, type Pipeline } from '@/services/pipeline'
@@ -54,8 +52,6 @@ const STATUSES = [
 ]
 
 export default function Tarefas() {
-  const { user } = useAuth()
-  const { isOwner } = useWorkspace()
   const [tasks, setTasks] = useState<Task[]>([])
   const [members, setMembers] = useState<TeamMember[]>([])
   const [pipelines, setPipelines] = useState<Pipeline[]>([])
@@ -84,11 +80,7 @@ export default function Tarefas() {
         pipelineService.list(),
       ])
       if (tasksRes.success && tasksRes.data) {
-        // Member only sees tasks assigned to them
-        const filtered = isOwner
-          ? tasksRes.data
-          : tasksRes.data.filter((t: Task) => t.assigneeId === user?.id)
-        setTasks(filtered)
+        setTasks(tasksRes.data)
       }
       if (membersRes.success && membersRes.data) setMembers(membersRes.data)
       if (pipelinesRes.success && pipelinesRes.data) setPipelines(pipelinesRes.data)
@@ -211,12 +203,10 @@ export default function Tarefas() {
             {tasks.length} {tasks.length === 1 ? 'tarefa' : 'tarefas'}
           </p>
         </div>
-        {isOwner && (
-          <Button onClick={() => setShowCreate(true)} size="sm">
-            <Plus size={16} />
-            Nova tarefa
-          </Button>
-        )}
+        <Button onClick={() => setShowCreate(true)} size="sm">
+          <Plus size={16} />
+          Nova tarefa
+        </Button>
       </div>
 
       {tasks.length === 0 ? (
@@ -371,7 +361,7 @@ export default function Tarefas() {
                     <SelectContent>
                       <SelectItem value="_none">Ninguem</SelectItem>
                       {members.map((m) => (
-                        <SelectItem key={m.id} value={m.user.id}>{m.user.name}</SelectItem>
+                        <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

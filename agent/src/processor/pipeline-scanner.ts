@@ -23,7 +23,7 @@ export interface BlockContext {
     assignee: {
       id: string;
       name: string;
-      email: string;
+      phone: string;
       remoteJid: string | null;
     } | null;
   }>;
@@ -68,7 +68,7 @@ export async function scanPipelines(): Promise<OwnerContext[]> {
               tasks: {
                 include: {
                   assignee: {
-                    select: { id: true, name: true, email: true, remoteJid: true },
+                    select: { id: true, name: true, phone: true, remoteJid: true },
                   },
                 },
               },
@@ -168,7 +168,7 @@ export async function scanPipelines(): Promise<OwnerContext[]> {
             ? {
                 id: t.assignee.id,
                 name: t.assignee.name,
-                email: t.assignee.email,
+                phone: t.assignee.phone,
                 remoteJid: t.assignee.remoteJid,
               }
             : null,

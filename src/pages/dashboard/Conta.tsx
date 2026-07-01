@@ -2,13 +2,11 @@ import { useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { COUNTRY_CODES } from '@/lib/country-codes'
 import { api } from '@/services/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import {
   Card,
   CardContent,
@@ -19,18 +17,8 @@ import {
 
 export default function Conta() {
   const { user } = useAuth()
-  // Extract countryCode from existing remoteJid (e.g. "5511999999999@s.whatsapp.net" → "55")
-  function extractCountryCode(): string {
-    if (!user?.remoteJid) return '55'
-    const digits = user.remoteJid.replace('@s.whatsapp.net', '')
-    for (const c of [...COUNTRY_CODES].sort((a, b) => b.code.length - a.code.length)) {
-      if (digits.startsWith(c.code)) return c.code
-    }
-    return '55'
-  }
 
   const [name, setName] = useState(user?.name || '')
-  const [countryCode, setCountryCode] = useState(extractCountryCode())
   const [phone, setPhone] = useState(user?.phone || '')
   const [savingProfile, setSavingProfile] = useState(false)
 
@@ -50,7 +38,7 @@ export default function Conta() {
 
     setSavingProfile(true)
     try {
-      const res = await api.patch('/api/auth/me', { name: name.trim(), phone: phone.trim() || null, countryCode })
+      const res = await api.patch('/api/auth/me', { name: name.trim(), phone: phone.trim() || null })
       if (res.data.success) {
         toast.success('Dados atualizados')
         window.location.reload()
@@ -129,33 +117,15 @@ export default function Conta() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Telefone</Label>
-                <div className="flex gap-2">
-                  <Select value={countryCode} onValueChange={setCountryCode}>
-                    <SelectTrigger className="w-28 shrink-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {COUNTRY_CODES.map((c) => (
-                        <SelectItem key={c.code} value={c.code}>
-                          {c.flag} +{c.code}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    type="tel"
-                    placeholder="11999999999"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    disabled={savingProfile}
-                  />
-                </div>
-                {phone && (
-                  <p className="text-[10px] text-zinc-500 font-mono">
-                    RemoteJid: {countryCode}{phone.replace(/\D/g, '')}@s.whatsapp.net
-                  </p>
-                )}
+                <Label htmlFor="account-phone" className="text-xs">Telefone</Label>
+                <Input
+                  id="account-phone"
+                  type="tel"
+                  placeholder="11999999999"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  disabled={savingProfile}
+                />
               </div>
               <Button type="submit" size="sm" disabled={savingProfile}>
                 {savingProfile ? <Spinner size="sm" /> : 'Salvar'}

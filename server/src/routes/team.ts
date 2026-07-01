@@ -1,5 +1,4 @@
 import { Router, Request, Response } from "express";
-import crypto from "crypto";
 import { prisma } from "../lib/prisma.js";
 import { logger } from "../lib/logger.js";
 import { authenticate } from "../middleware/auth.js";
@@ -7,39 +6,11 @@ import { authenticate } from "../middleware/auth.js";
 const router = Router();
 router.use(authenticate);
 
-// GET /api/team/my-teams — list teams where I'm a member
-router.get("/my-teams", async (req: Request, res: Response) => {
-  try {
-    const memberships = await prisma.teamMember.findMany({
-      where: { userId: req.userId, status: "accepted" },
-      include: {
-        owner: { select: { id: true, name: true, email: true } },
-      },
-      orderBy: { createdAt: "asc" },
-    });
-
-    const teams = memberships.map((m) => ({
-      ownerId: m.ownerId,
-      ownerName: m.owner.name,
-      ownerEmail: m.owner.email,
-      role: m.role,
-    }));
-
-    res.json({ success: true, data: teams });
-  } catch (error) {
-    logger.error("TEAM", "List my teams failed", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
-});
-
-// GET /api/team — list my team members (only accepted)
+// GET /api/team — list team members
 router.get("/", async (req: Request, res: Response) => {
   try {
     const members = await prisma.teamMember.findMany({
-      where: { ownerId: req.userId, status: "accepted" },
-      include: {
-        user: { select: { id: true, name: true, email: true, phone: true } },
-      },
+      where: { ownerId: req.userId },
       orderBy: { createdAt: "asc" },
     });
 
@@ -50,244 +21,81 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/team/pending — list pending invites I sent
-router.get("/pending", async (req: Request, res: Response) => {
+// POST /api/team — create team member
+router.post("/", async (req: Request, res: Response) => {
   try {
-    const pending = await prisma.teamMember.findMany({
-      where: { ownerId: req.userId, status: "pending" },
-      include: {
-        user: { select: { id: true, name: true, email: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const { name, phone, countryCode } = req.body;
 
-    res.json({ success: true, data: pending });
-  } catch (error) {
-    logger.error("TEAM", "List pending failed", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
-});
-
-// POST /api/team/invite-link — generate invite link
-router.post("/invite-link", async (req: Request, res: Response) => {
-  try {
-    // Only owner can generate invite links
-    const user = await prisma.user.findUnique({ where: { id: req.userId } });
-    if (!user?.isOwner) {
-      res.status(403).json({ success: false, message: "Apenas o proprietario pode gerar links de convite" });
+    if (!name?.trim()) {
+      res.status(400).json({ success: false, message: "Nome e obrigatorio" });
       return;
     }
 
-    const { expiresInHours } = req.body;
-    const hours = Number(expiresInHours) || 48;
-
-    const token = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
-
-    const invite = await prisma.inviteToken.create({
-      data: {
-        token,
-        ownerId: req.userId,
-        expiresAt,
-      },
-    });
-
-    logger.info("TEAM", "Invite link generated", { tokenId: invite.id, expiresAt });
-
-    res.status(201).json({
-      success: true,
-      data: {
-        token: invite.token,
-        expiresAt: invite.expiresAt,
-      },
-    });
-  } catch (error) {
-    logger.error("TEAM", "Generate invite link failed", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
-});
-
-// GET /api/team/invite-links — list active invite links
-router.get("/invite-links", async (req: Request, res: Response) => {
-  try {
-    const user = await prisma.user.findUnique({ where: { id: req.userId } });
-    if (!user?.isOwner) {
-      res.status(403).json({ success: false, message: "Apenas o proprietario pode ver links de convite" });
+    if (!phone?.trim()) {
+      res.status(400).json({ success: false, message: "Telefone e obrigatorio" });
       return;
     }
 
-    const links = await prisma.inviteToken.findMany({
-      where: { ownerId: req.userId },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    });
-
-    res.json({ success: true, data: links });
-  } catch (error) {
-    logger.error("TEAM", "List invite links failed", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
-});
-
-// DELETE /api/team/invite-link/:id — revoke invite link
-router.delete("/invite-link/:id", async (req: Request, res: Response) => {
-  try {
-    const deleted = await prisma.inviteToken.deleteMany({
-      where: { id: req.params.id, ownerId: req.userId },
-    });
-
-    if (deleted.count === 0) {
-      res.status(404).json({ success: false, message: "Link nao encontrado" });
-      return;
-    }
-
-    logger.info("TEAM", "Invite link revoked", { tokenId: req.params.id });
-    res.json({ success: true, message: "Link revogado" });
-  } catch (error) {
-    logger.error("TEAM", "Revoke invite link failed", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
-});
-
-// POST /api/team/invite — send invite to user by email (legacy — kept for existing members)
-router.post("/invite", async (req: Request, res: Response) => {
-  try {
-    const { email } = req.body;
-
-    if (!email?.trim()) {
-      res.status(400).json({ success: false, message: "Email is required" });
-      return;
-    }
-
-    const targetUser = await prisma.user.findUnique({ where: { email: email.trim() } });
-    if (!targetUser) {
-      res.status(404).json({ success: false, message: "Nenhum usuario encontrado com esse email" });
-      return;
-    }
-
-    if (targetUser.id === req.userId) {
-      res.status(400).json({ success: false, message: "Voce nao pode convidar a si mesmo" });
-      return;
+    const digits = phone.replace(/\D/g, "");
+    let remoteJid: string | null = null;
+    if (countryCode) {
+      remoteJid = `${countryCode}${digits}@s.whatsapp.net`;
     }
 
     const existing = await prisma.teamMember.findUnique({
-      where: { ownerId_userId: { ownerId: req.userId, userId: targetUser.id } },
+      where: { ownerId_phone: { ownerId: req.userId, phone: digits } },
     });
 
     if (existing) {
-      if (existing.status === "pending") {
-        res.status(409).json({ success: false, message: "Convite ja enviado para esse usuario" });
-        return;
-      }
-      if (existing.status === "accepted") {
-        res.status(409).json({ success: false, message: "Usuario ja faz parte do seu time" });
-        return;
-      }
-      await prisma.teamMember.update({
-        where: { id: existing.id },
-        data: { status: "pending" },
-      });
-    } else {
-      await prisma.teamMember.create({
-        data: {
-          ownerId: req.userId,
-          userId: targetUser.id,
-          status: "pending",
-        },
-      });
+      res.status(409).json({ success: false, message: "Membro com esse telefone ja existe" });
+      return;
     }
 
-    const owner = await prisma.user.findUnique({
-      where: { id: req.userId },
-      select: { name: true },
-    });
-
-    await prisma.notification.create({
+    const member = await prisma.teamMember.create({
       data: {
-        userId: targetUser.id,
-        type: "team_invite",
-        title: "Convite para time",
-        message: `${owner?.name || "Alguem"} convidou voce para fazer parte do time.`,
-        data: { ownerId: req.userId, ownerName: owner?.name },
+        ownerId: req.userId,
+        name: name.trim(),
+        phone: digits,
+        remoteJid,
       },
     });
 
-    logger.info("TEAM", "Invite sent", { to: targetUser.id });
-    res.status(201).json({ success: true, message: "Convite enviado" });
+    logger.info("TEAM", "Member created", { memberId: member.id });
+    res.status(201).json({ success: true, data: member });
   } catch (error) {
-    logger.error("TEAM", "Send invite failed", error);
+    logger.error("TEAM", "Create member failed", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
 
-// POST /api/team/respond — accept or reject invite
-router.post("/respond", async (req: Request, res: Response) => {
-  try {
-    const { ownerId, accept } = req.body;
-
-    if (!ownerId || accept === undefined) {
-      res.status(400).json({ success: false, message: "ownerId and accept are required" });
-      return;
-    }
-
-    const invite = await prisma.teamMember.findUnique({
-      where: { ownerId_userId: { ownerId, userId: req.userId } },
-    });
-
-    if (!invite || invite.status !== "pending") {
-      res.status(404).json({ success: false, message: "Convite nao encontrado" });
-      return;
-    }
-
-    const newStatus = accept ? "accepted" : "rejected";
-    await prisma.teamMember.update({
-      where: { id: invite.id },
-      data: { status: newStatus },
-    });
-
-    const responder = await prisma.user.findUnique({
-      where: { id: req.userId },
-      select: { name: true },
-    });
-
-    await prisma.notification.create({
-      data: {
-        userId: ownerId,
-        type: "team_invite_response",
-        title: accept ? "Convite aceito" : "Convite recusado",
-        message: `${responder?.name || "Alguem"} ${accept ? "aceitou" : "recusou"} seu convite para o time.`,
-        data: { userId: req.userId, userName: responder?.name, accepted: accept },
-      },
-    });
-
-    logger.info("TEAM", `Invite ${newStatus}`, { ownerId, userId: req.userId });
-    res.json({ success: true, message: accept ? "Convite aceito" : "Convite recusado" });
-  } catch (error) {
-    logger.error("TEAM", "Respond invite failed", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
-});
-
-// PATCH /api/team/:memberId — update role
+// PATCH /api/team/:memberId — update member
 router.patch("/:memberId", async (req: Request, res: Response) => {
   try {
-    const { role } = req.body;
+    const { name, phone, countryCode, role } = req.body;
 
     const member = await prisma.teamMember.findFirst({
-      where: { id: req.params.memberId as string, ownerId: req.userId, status: "accepted" },
+      where: { id: req.params.memberId as string, ownerId: req.userId },
     });
 
     if (!member) {
-      res.status(404).json({ success: false, message: "Member not found" });
+      res.status(404).json({ success: false, message: "Membro nao encontrado" });
       return;
+    }
+
+    const data: Record<string, unknown> = {};
+    if (name !== undefined) data.name = name.trim();
+    if (role !== undefined) data.role = role;
+    if (phone !== undefined) {
+      const digits = phone.replace(/\D/g, "");
+      data.phone = digits;
+      if (countryCode) {
+        data.remoteJid = `${countryCode}${digits}@s.whatsapp.net`;
+      }
     }
 
     const updated = await prisma.teamMember.update({
       where: { id: member.id },
-      data: { role },
-      include: {
-        user: { select: { id: true, name: true, email: true, phone: true } },
-      },
+      data,
     });
 
     res.json({ success: true, data: updated });
@@ -297,7 +105,7 @@ router.patch("/:memberId", async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/team/:memberId — remove member or cancel invite
+// DELETE /api/team/:memberId — remove member
 router.delete("/:memberId", async (req: Request, res: Response) => {
   try {
     const deleted = await prisma.teamMember.deleteMany({
@@ -305,12 +113,12 @@ router.delete("/:memberId", async (req: Request, res: Response) => {
     });
 
     if (deleted.count === 0) {
-      res.status(404).json({ success: false, message: "Member not found" });
+      res.status(404).json({ success: false, message: "Membro nao encontrado" });
       return;
     }
 
     logger.info("TEAM", "Member removed", { memberId: req.params.memberId as string });
-    res.json({ success: true, message: "Member removed" });
+    res.json({ success: true, message: "Membro removido" });
   } catch (error) {
     logger.error("TEAM", "Remove member failed", error);
     res.status(500).json({ success: false, message: "Internal server error" });

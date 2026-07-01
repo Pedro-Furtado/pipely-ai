@@ -97,7 +97,7 @@ export default function Login() {
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Senha</Label>
                 <Link
-                  to="/forgot-password"
+                  to="/reset-password"
                   className="text-sm text-zinc-400 hover:text-zinc-50 transition-colors"
                 >
                   Esqueceu a senha?
@@ -130,7 +130,7 @@ export default function Login() {
               {isSubmitting ? <Spinner size="sm" /> : 'Entrar'}
             </Button>
             <p className="text-xs text-zinc-500">
-              Para criar uma conta, solicite um link de convite ao proprietario.
+              Acesso exclusivo do proprietario da plataforma.
             </p>
           </CardFooter>
         </form>

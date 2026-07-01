@@ -3,9 +3,7 @@ export interface User {
   email: string
   name: string
   phone: string | null
-  remoteJid: string | null
   isOwner: boolean
-  emailVerified: boolean
 }
 
 export interface LoginRequest {
@@ -13,23 +11,9 @@ export interface LoginRequest {
   password: string
 }
 
-export interface RegisterRequest {
-  email: string
-  password: string
-  name: string
-  phone?: string
-  countryCode?: string
-  confirmPassword: string
-  inviteToken?: string
-}
-
-export interface ForgotPasswordRequest {
-  email: string
-}
-
 export interface ResetPasswordRequest {
+  setupKey: string
   password: string
-  confirmPassword: string
 }
 
 export interface AuthResponse {

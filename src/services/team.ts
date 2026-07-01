@@ -4,16 +4,11 @@ import type { ApiResponse } from '@/types/auth'
 export interface TeamMember {
   id: string
   ownerId: string
-  userId: string
+  name: string
+  phone: string
+  remoteJid: string | null
   role: string
-  status: string
   createdAt: string
-  user: {
-    id: string
-    name: string
-    email: string
-    phone: string | null
-  }
 }
 
 export const teamService = {
@@ -22,43 +17,18 @@ export const teamService = {
     return res.data
   },
 
-  async listPending(): Promise<ApiResponse & { data?: TeamMember[] }> {
-    const res = await api.get('/api/team/pending')
+  async create(data: { name: string; phone: string; countryCode?: string }): Promise<ApiResponse & { data?: TeamMember }> {
+    const res = await api.post('/api/team', data)
     return res.data
   },
 
-  async invite(email: string): Promise<ApiResponse> {
-    const res = await api.post('/api/team/invite', { email })
-    return res.data
-  },
-
-  async respond(ownerId: string, accept: boolean): Promise<ApiResponse> {
-    const res = await api.post('/api/team/respond', { ownerId, accept })
-    return res.data
-  },
-
-  async updateRole(memberId: string, role: string): Promise<ApiResponse & { data?: TeamMember }> {
-    const res = await api.patch(`/api/team/${memberId}`, { role })
+  async update(memberId: string, data: { name?: string; phone?: string; countryCode?: string; role?: string }): Promise<ApiResponse & { data?: TeamMember }> {
+    const res = await api.patch(`/api/team/${memberId}`, data)
     return res.data
   },
 
   async remove(memberId: string): Promise<ApiResponse> {
     const res = await api.delete(`/api/team/${memberId}`)
-    return res.data
-  },
-
-  async generateInviteLink(expiresInHours?: number): Promise<ApiResponse & { data?: { token: string; expiresAt: string } }> {
-    const res = await api.post('/api/team/invite-link', { expiresInHours })
-    return res.data
-  },
-
-  async listInviteLinks(): Promise<ApiResponse & { data?: Array<{ id: string; token: string; expiresAt: string; usedAt: string | null; usedBy: string | null; createdAt: string }> }> {
-    const res = await api.get('/api/team/invite-links')
-    return res.data
-  },
-
-  async revokeInviteLink(id: string): Promise<ApiResponse> {
-    const res = await api.delete(`/api/team/invite-link/${id}`)
     return res.data
   },
 }

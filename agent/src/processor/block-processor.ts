@@ -8,6 +8,13 @@ import type { BlockContext, OwnerContext } from "./pipeline-scanner.js";
 
 const MAX_STEPS = 5;
 
+const PRIORITY_LABELS: Record<string, string> = {
+  low: "baixa 🟢",
+  medium: "media 🔵",
+  high: "alta 🟡",
+  urgent: "urgente 🔴",
+};
+
 function buildSystemPrompt(blockCtx: BlockContext): string {
   const { block, tasks, pipeline, allBlocks } = blockCtx;
   const config = block.config;
@@ -19,14 +26,16 @@ function buildSystemPrompt(blockCtx: BlockContext): string {
   const taskList = tasks
     .map((t) => {
       const assignee = t.assignee
-        ? `responsavel: ${t.assignee.name} (${t.assignee.email}, jid: ${t.assignee.remoteJid || "nao configurado"})`
+        ? `responsavel: ${t.assignee.name} (tel: ${t.assignee.phone}, jid: ${t.assignee.remoteJid || "nao configurado"})`
         : "sem responsavel";
       const desc = t.description ? `, descricao: "${t.description}"` : "";
-      return `  - "${t.title}" (id: ${t.id}, prioridade: ${t.priority}${desc}, ${assignee}, ${t.minutesInBlock} min no bloco)`;
+      const pri = PRIORITY_LABELS[t.priority] || t.priority;
+      return `  - "${t.title}" (id: ${t.id}, prioridade: ${pri}${desc}, ${assignee}, ${t.minutesInBlock} min no bloco)`;
     })
     .join("\n");
 
   let prompt = `Voce e o agente de automacao do Pipely AI.
+Voce se comunica DIRETAMENTE com os membros do time via WhatsApp. Voce NAO "avisa ao responsavel" — voce E quem fala com eles.
 Seu trabalho e processar blocos dinamicos do pipeline e executar as automacoes configuradas.
 
 PIPELINE: ${pipeline.name}
@@ -53,19 +62,13 @@ REGRAS:
 10. MENSAGENS SEPARADAS: Use o array "messages" para enviar 2-3 mensagens curtas sequenciais.
 11. Emojis de prioridade: 🟢 baixa, 🔵 media, 🟡 alta, 🔴 urgente.
 
-REGRAS DE COMUNICACAO (OBRIGATORIO):
+REGRAS DE COMUNICACAO:
 - NUNCA mencione pipeline, blocos, estagios, fluxo, sistema ou qualquer termo tecnico interno.
-- NUNCA use frases genericas de chatbot. Lista de frases PROIBIDAS:
-  "Se precisar de algo", "estou a disposicao", "qualquer coisa me avise", "estou aqui para ajudar",
-  "fico a disposicao", "conte comigo", "aguardo sua resposta", "obrigado pela confirmacao".
-- Use emojis para deixar a conversa dinamica: 👍 ✅ 📋 🔥 💪 👊 ✍️
-- Ao mencionar prioridade, SEMPRE use o formato: "Prioridade: alta 🟡" (texto + emoji).
-  Mapeamento: baixa 🟢, media 🔵, alta 🟡, urgente 🔴.
-- Seja DIRETO e CURTO. Sem enrolacao.
-- Voce e um colega de trabalho, NAO um assistente virtual.
-- Tom informal e profissional. Como se fosse um amigo do trabalho no WhatsApp.
-- Use o PRIMEIRO NOME da pessoa de vez em quando (nao em toda mensagem, alterne).
-- SEMPRE mostre a prioridade da tarefa com o emoji correspondente (🟢🔵🟡🔴).
+- NUNCA use frases genericas de chatbot ou assistente virtual.
+- Seja direto, curto e natural. Tom de colega de trabalho no WhatsApp.
+- Use emojis com moderacao para deixar a conversa dinamica.
+- Ao mencionar prioridade, use o formato: "Prioridade: [nivel] [emoji]" (baixa 🟢, media 🔵, alta 🟡, urgente 🔴).
+- Use o primeiro nome da pessoa ocasionalmente.
 `;
 
   // Prompt do agente

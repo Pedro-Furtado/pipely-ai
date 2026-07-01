@@ -3,8 +3,6 @@ import type {
   AuthResponse,
   ApiResponse,
   LoginRequest,
-  RegisterRequest,
-  ForgotPasswordRequest,
   ResetPasswordRequest,
 } from '@/types/auth'
 
@@ -17,10 +15,6 @@ api.interceptors.request.use((config) => {
   const token = localStorage.getItem('accessToken')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
-  }
-  const workspaceOwner = localStorage.getItem('workspaceOwnerId')
-  if (workspaceOwner) {
-    config.headers['X-Workspace-Owner'] = workspaceOwner
   }
   return config
 })
@@ -49,8 +43,6 @@ api.interceptors.response.use(
 
     const skipRefreshRoutes = [
       '/api/auth/login',
-      '/api/auth/register',
-      '/api/auth/forgot-password',
       '/api/auth/reset-password',
     ]
     const isAuthRoute = skipRefreshRoutes.some(
@@ -110,27 +102,8 @@ export const authService = {
     return response.data
   },
 
-  async register(data: RegisterRequest): Promise<ApiResponse> {
-    const response = await api.post<ApiResponse>('/api/auth/register', data)
-    return response.data
-  },
-
-  async forgotPassword(data: ForgotPasswordRequest): Promise<ApiResponse> {
-    const response = await api.post<ApiResponse>(
-      '/api/auth/forgot-password',
-      data
-    )
-    return response.data
-  },
-
-  async resetPassword(
-    token: string,
-    data: ResetPasswordRequest
-  ): Promise<ApiResponse> {
-    const response = await api.post<ApiResponse>('/api/auth/reset-password', {
-      token,
-      password: data.password,
-    })
+  async resetPassword(data: ResetPasswordRequest): Promise<ApiResponse> {
+    const response = await api.post<ApiResponse>('/api/auth/reset-password', data)
     return response.data
   },
 

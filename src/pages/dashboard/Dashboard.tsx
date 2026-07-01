@@ -149,8 +149,8 @@ export default function Dashboard() {
     try {
       const [tasksRes, pipelinesRes, membersRes] = await Promise.all([
         taskService.list(),
-        isOwner ? pipelineService.list() : Promise.resolve({ success: true, data: [] as Pipeline[] }),
-        isOwner ? teamService.list() : Promise.resolve({ success: true, data: [] as TeamMember[] }),
+        pipelineService.list(),
+        teamService.list(),
       ])
 
       if (tasksRes.success && tasksRes.data) setTasks(tasksRes.data)

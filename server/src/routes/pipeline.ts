@@ -2,11 +2,9 @@ import { Router, Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
 import { logger } from "../lib/logger.js";
 import { authenticate } from "../middleware/auth.js";
-import { resolveWorkspace } from "../middleware/workspace.js";
 
 const router = Router();
 router.use(authenticate);
-router.use(resolveWorkspace);
 
 // ─── PIPELINES ───────────────────────────────────────────────────────────────
 
@@ -14,7 +12,7 @@ router.use(resolveWorkspace);
 router.get("/", async (req: Request, res: Response) => {
   try {
     const pipelines = await prisma.pipeline.findMany({
-      where: { ownerId: req.ownerId },
+      where: { ownerId: req.userId },
       include: {
         phases: {
           orderBy: { position: "asc" },
@@ -47,7 +45,7 @@ router.post("/", async (req: Request, res: Response) => {
     }
 
     const pipeline = await prisma.pipeline.create({
-      data: { name: name.trim(), ownerId: req.ownerId },
+      data: { name: name.trim(), ownerId: req.userId },
     });
 
     logger.info("PIPELINE", "Pipeline created", { pipelineId: pipeline.id });
@@ -62,7 +60,7 @@ router.post("/", async (req: Request, res: Response) => {
 router.get("/:id", async (req: Request, res: Response) => {
   try {
     const pipeline = await prisma.pipeline.findFirst({
-      where: { id: req.params.id, ownerId: req.ownerId },
+      where: { id: req.params.id, ownerId: req.userId },
       include: {
         phases: {
           orderBy: { position: "asc" },
@@ -72,7 +70,7 @@ router.get("/:id", async (req: Request, res: Response) => {
               include: {
                 tasks: {
                   include: {
-                    assignee: { select: { id: true, name: true, email: true } },
+                    assignee: { select: { id: true, name: true, phone: true } },
                   },
                   orderBy: { enteredAt: "asc" },
                 },
@@ -103,7 +101,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
     const { name } = req.body;
 
     const pipeline = await prisma.pipeline.updateMany({
-      where: { id: req.params.id, ownerId: req.ownerId },
+      where: { id: req.params.id, ownerId: req.userId },
       data: { name: name?.trim() },
     });
 
@@ -123,7 +121,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
 router.delete("/:id", async (req: Request, res: Response) => {
   try {
     const deleted = await prisma.pipeline.deleteMany({
-      where: { id: req.params.id, ownerId: req.ownerId },
+      where: { id: req.params.id, ownerId: req.userId },
     });
 
     if (deleted.count === 0) {
@@ -147,7 +145,7 @@ router.post("/:id/phases", async (req: Request, res: Response) => {
     const { name, color } = req.body;
 
     const pipeline = await prisma.pipeline.findFirst({
-      where: { id: req.params.id, ownerId: req.ownerId },
+      where: { id: req.params.id, ownerId: req.userId },
     });
     if (!pipeline) {
       res.status(404).json({ success: false, message: "Pipeline not found" });
@@ -191,7 +189,7 @@ router.patch("/phases/:phaseId", async (req: Request, res: Response) => {
       include: { pipeline: true },
     });
 
-    if (!phase || phase.pipeline.ownerId !== req.ownerId) {
+    if (!phase || phase.pipeline.ownerId !== req.userId) {
       res.status(404).json({ success: false, message: "Phase not found" });
       return;
     }
@@ -224,7 +222,7 @@ router.delete("/phases/:phaseId", async (req: Request, res: Response) => {
       },
     });
 
-    if (!phase || phase.pipeline.ownerId !== req.ownerId) {
+    if (!phase || phase.pipeline.ownerId !== req.userId) {
       res.status(404).json({ success: false, message: "Phase not found" });
       return;
     }
@@ -256,7 +254,7 @@ router.patch("/:id/phases/reorder", async (req: Request, res: Response) => {
     const { order } = req.body; // [{ id, position }]
 
     const pipeline = await prisma.pipeline.findFirst({
-      where: { id: req.params.id, ownerId: req.ownerId },
+      where: { id: req.params.id, ownerId: req.userId },
     });
     if (!pipeline) {
       res.status(404).json({ success: false, message: "Pipeline not found" });
@@ -301,7 +299,7 @@ router.post("/phases/:phaseId/blocks", async (req: Request, res: Response) => {
       include: { pipeline: true },
     });
 
-    if (!phase || phase.pipeline.ownerId !== req.ownerId) {
+    if (!phase || phase.pipeline.ownerId !== req.userId) {
       res.status(404).json({ success: false, message: "Phase not found" });
       return;
     }
@@ -350,7 +348,7 @@ router.patch("/blocks/:blockId", async (req: Request, res: Response) => {
       include: { phase: { include: { pipeline: true } } },
     });
 
-    if (!block || block.phase.pipeline.ownerId !== req.ownerId) {
+    if (!block || block.phase.pipeline.ownerId !== req.userId) {
       res.status(404).json({ success: false, message: "Block not found" });
       return;
     }
@@ -366,7 +364,7 @@ router.patch("/blocks/:blockId", async (req: Request, res: Response) => {
         where: { id: phaseId },
         include: { pipeline: true },
       });
-      if (!targetPhase || targetPhase.pipeline.ownerId !== req.ownerId) {
+      if (!targetPhase || targetPhase.pipeline.ownerId !== req.userId) {
         res.status(403).json({ success: false, message: "Target phase not found" });
         return;
       }
@@ -396,7 +394,7 @@ router.delete("/blocks/:blockId", async (req: Request, res: Response) => {
       },
     });
 
-    if (!block || block.phase.pipeline.ownerId !== req.ownerId) {
+    if (!block || block.phase.pipeline.ownerId !== req.userId) {
       res.status(404).json({ success: false, message: "Block not found" });
       return;
     }
@@ -430,7 +428,7 @@ router.patch("/phases/:phaseId/blocks/reorder", async (req: Request, res: Respon
       include: { pipeline: true },
     });
 
-    if (!phase || phase.pipeline.ownerId !== req.ownerId) {
+    if (!phase || phase.pipeline.ownerId !== req.userId) {
       res.status(404).json({ success: false, message: "Phase not found" });
       return;
     }
@@ -474,7 +472,7 @@ router.patch("/tasks/:taskId/move", async (req: Request, res: Response) => {
     }
 
     const task = await prisma.task.findFirst({
-      where: { id: req.params.taskId, creatorId: req.ownerId },
+      where: { id: req.params.taskId, ownerId: req.userId },
     });
 
     if (!task) {
@@ -492,7 +490,7 @@ router.patch("/tasks/:taskId/move", async (req: Request, res: Response) => {
       where: { id: blockId },
       include: { phase: { include: { pipeline: true } } },
     });
-    if (!targetBlock || targetBlock.phase.pipeline.ownerId !== req.ownerId) {
+    if (!targetBlock || targetBlock.phase.pipeline.ownerId !== req.userId) {
       res.status(403).json({ success: false, message: "Target block not found" });
       return;
     }
@@ -514,7 +512,7 @@ router.patch("/tasks/:taskId/move", async (req: Request, res: Response) => {
       where: { id: task.id },
       data: { blockId, enteredAt: new Date(), processedAt: null },
       include: {
-        assignee: { select: { id: true, name: true, email: true } },
+        assignee: { select: { id: true, name: true, phone: true } },
       },
     });
 
@@ -538,7 +536,7 @@ router.post("/blocks/:blockId/automations", async (req: Request, res: Response) 
       include: { phase: { include: { pipeline: true } } },
     });
 
-    if (!block || block.phase.pipeline.ownerId !== req.ownerId) {
+    if (!block || block.phase.pipeline.ownerId !== req.userId) {
       res.status(404).json({ success: false, message: "Block not found" });
       return;
     }
@@ -574,7 +572,7 @@ router.patch("/automations/:automationId", async (req: Request, res: Response) =
       include: { block: { include: { phase: { include: { pipeline: true } } } } },
     });
 
-    if (!automation || automation.block.phase.pipeline.ownerId !== req.ownerId) {
+    if (!automation || automation.block.phase.pipeline.ownerId !== req.userId) {
       res.status(404).json({ success: false, message: "Automation not found" });
       return;
     }
@@ -604,7 +602,7 @@ router.delete("/automations/:automationId", async (req: Request, res: Response) 
       include: { block: { include: { phase: { include: { pipeline: true } } } } },
     });
 
-    if (!automation || automation.block.phase.pipeline.ownerId !== req.ownerId) {
+    if (!automation || automation.block.phase.pipeline.ownerId !== req.userId) {
       res.status(404).json({ success: false, message: "Automation not found" });
       return;
     }

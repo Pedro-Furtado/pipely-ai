@@ -6,9 +6,7 @@ import PublicRoute from '@/routes/PublicRoute'
 import OwnerOnlyRoute from '@/routes/OwnerOnlyRoute'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import Login from '@/pages/auth/Login'
-import Register from '@/pages/auth/Register'
 import Setup from '@/pages/auth/Setup'
-import ForgotPassword from '@/pages/auth/ForgotPassword'
 import ResetPassword from '@/pages/auth/ResetPassword'
 import Dashboard from '@/pages/dashboard/Dashboard'
 import Pipeline from '@/pages/dashboard/Pipeline'
@@ -17,7 +15,6 @@ import Tarefas from '@/pages/dashboard/Tarefas'
 import Assistente from '@/pages/dashboard/Assistente'
 import WhatsApp from '@/pages/dashboard/WhatsApp'
 import Conta from '@/pages/dashboard/Conta'
-import Settings from '@/pages/dashboard/Settings'
 import NotFound from '@/pages/NotFound'
 
 export default function AppRouter() {
@@ -47,26 +44,21 @@ export default function AppRouter() {
 
       <Route element={<PublicRoute />}>
         <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
         <Route path="/setup" element={<Navigate to="/login" replace />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password/:token" element={<ResetPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
       </Route>
 
       <Route element={<ProtectedRoute />}>
         <Route element={<DashboardLayout />}>
-          {/* Available in all workspaces */}
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/tarefas" element={<Tarefas />} />
           <Route path="/conta" element={<Conta />} />
 
-          {/* Owner only — redirects to /dashboard if member workspace */}
           <Route element={<OwnerOnlyRoute />}>
             <Route path="/pipeline" element={<Pipeline />} />
             <Route path="/time" element={<Time />} />
             <Route path="/assistente" element={<Assistente />} />
             <Route path="/whatsapp" element={<WhatsApp />} />
-            <Route path="/settings" element={<Settings />} />
           </Route>
         </Route>
       </Route>

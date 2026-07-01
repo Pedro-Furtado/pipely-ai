@@ -4,7 +4,6 @@ import { toast } from 'sonner'
 import {
   ChevronsUpDown,
   LogOut,
-  Settings,
   UserCog,
   User,
   Bell,
@@ -17,7 +16,6 @@ import {
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
 import { notificationService, type Notification } from '@/services/notifications'
-import { teamService } from '@/services/team'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import {
@@ -102,16 +100,6 @@ export default function NavUser({ collapsed = false }: NavUserProps) {
     await notificationService.remove(id)
     setNotifications((prev) => prev.filter((notif) => notif.id !== id))
     if (n && !n.read) setUnreadCount((prev) => Math.max(0, prev - 1))
-  }
-
-  async function handleInviteResponse(ownerId: string, accept: boolean, notifId: string) {
-    try {
-      await teamService.respond(ownerId, accept)
-      toast.success(accept ? 'Convite aceito!' : 'Convite recusado')
-      handleMarkRead(notifId)
-    } catch {
-      toast.error('Erro ao responder convite')
-    }
   }
 
   async function handleLogout() {
@@ -226,15 +214,6 @@ export default function NavUser({ collapsed = false }: NavUserProps) {
                   <span>Minha conta</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleNavigate('/settings')}
-                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-50"
-                >
-                  <Settings size={16} />
-                  <span>Configuracoes</span>
-                </button>
-
                 <div className="my-1 h-px bg-zinc-800" />
 
                 <button
@@ -312,33 +291,6 @@ export default function NavUser({ collapsed = false }: NavUserProps) {
                             </div>
                             <p className="mt-0.5 text-[11px] text-zinc-500">{notif.message}</p>
 
-                            {notif.type === 'team_invite' && !notif.read && (
-                              <div className="mt-2 flex gap-2">
-                                <Button
-                                  size="sm"
-                                  className="h-6 text-[10px]"
-                                  onClick={() => handleInviteResponse(
-                                    notif.data.ownerId as string,
-                                    true,
-                                    notif.id
-                                  )}
-                                >
-                                  Aceitar
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-6 text-[10px]"
-                                  onClick={() => handleInviteResponse(
-                                    notif.data.ownerId as string,
-                                    false,
-                                    notif.id
-                                  )}
-                                >
-                                  Recusar
-                                </Button>
-                              </div>
-                            )}
                           </div>
                         </div>
 

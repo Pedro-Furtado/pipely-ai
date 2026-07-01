@@ -6,7 +6,7 @@ import {
   useCallback,
   type ReactNode,
 } from 'react'
-import type { User, LoginRequest, RegisterRequest } from '@/types/auth'
+import type { User, LoginRequest } from '@/types/auth'
 import { authService } from '@/services/api'
 
 interface AuthContextData {
@@ -14,7 +14,6 @@ interface AuthContextData {
   isAuthenticated: boolean
   isLoading: boolean
   login: (data: LoginRequest) => Promise<void>
-  register: (data: RegisterRequest) => Promise<void>
   logout: () => Promise<void>
 }
 
@@ -57,10 +56,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const register = useCallback(async (data: RegisterRequest) => {
-    await authService.register(data)
-  }, [])
-
   const logout = useCallback(async () => {
     try {
       await authService.logout()
@@ -72,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated, isLoading, login, register, logout }}
+      value={{ user, isAuthenticated, isLoading, login, logout }}
     >
       {children}
     </AuthContext.Provider>
