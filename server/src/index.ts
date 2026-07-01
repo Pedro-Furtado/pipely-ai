@@ -1,6 +1,7 @@
 import "dotenv/config";
 import crypto from "crypto";
 import http from "http";
+import path from "path";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -61,10 +62,9 @@ app.get("/health", (_req, res) => {
 
 // Serve frontend static files in local mode (no nginx)
 if (process.env.SERVE_FRONTEND) {
-  const path = await import("path");
   const frontendPath = path.resolve(process.env.SERVE_FRONTEND);
   app.use(express.static(frontendPath));
-  app.get(/^\/(?!api|health).*/, (_req, res) => {
+  app.get("*", (_req, res) => {
     res.sendFile(path.join(frontendPath, "index.html"));
   });
 }
