@@ -6,8 +6,8 @@ const isSQLite = databaseUrl.startsWith("file:");
 let prisma: PrismaClient;
 
 if (isSQLite) {
-  // SQLite: no adapter needed
-  prisma = new PrismaClient();
+  // SQLite: no adapter, pass URL directly
+  prisma = new PrismaClient({ datasourceUrl: databaseUrl });
 } else {
   // PostgreSQL: use pg adapter
   const pg = await import("pg");

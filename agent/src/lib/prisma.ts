@@ -6,7 +6,7 @@ const isSQLite = databaseUrl.startsWith("file:");
 let prisma: PrismaClient;
 
 if (isSQLite) {
-  prisma = new PrismaClient();
+  prisma = new PrismaClient({ datasourceUrl: databaseUrl });
 } else {
   const pg = await import("pg");
   const { PrismaPg } = await import("@prisma/adapter-pg");

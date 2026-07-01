@@ -525,11 +525,7 @@ VITE_API_URL=http://localhost:3333
 }
 
 async function installLocal() {
-  printBanner();
-
   const os = detectOS();
-  console.log(`  Sistema: ${c.bold}${os.label}${c.reset} (${os.arch})`);
-  console.log(`  Modo: ${c.cyan}Local (sem Docker)${c.reset}\n`);
 
   // Check if already installed
   if (isLocalInstalled()) {
@@ -604,7 +600,7 @@ async function installLocal() {
   // Setup database
   process.stdout.write(`  Criando banco de dados... `);
   try {
-    execSync("npx prisma db push --skip-generate", {
+    execSync("npx prisma db push", {
       cwd: join(PIPELY_DIR, "server"),
       stdio: "pipe",
       env: { ...process.env, DATABASE_URL: `file:${join(PIPELY_DIR, "data/pipely.db")}` },
