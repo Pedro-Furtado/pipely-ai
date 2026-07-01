@@ -36,6 +36,16 @@ jobs:
       - name: Setup SQLite schema
         run: |
           cp server/prisma/schema.sqlite.prisma server/prisma/schema.prisma
+          cat > server/prisma.config.ts << 'CFGEOF'
+          import "dotenv/config";
+          import { defineConfig } from "prisma/config";
+          export default defineConfig({
+            schema: "prisma/schema.prisma",
+            datasource: {
+              url: "file:./data/pipely.db",
+            },
+          });
+          CFGEOF
           cd server && npx prisma generate
 
       - name: Compile server
@@ -54,6 +64,7 @@ jobs:
           # Server
           cp -r server/dist-compiled/* bundle/server/dist/ 2>/dev/null || true
           cp server/prisma/schema.prisma bundle/server/prisma/
+          cp server/prisma.config.ts bundle/server/
           cp -r server/generated bundle/server/
 
           # Agent
