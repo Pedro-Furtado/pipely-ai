@@ -963,6 +963,11 @@ async function install() {
   const os = detectOS();
   console.log(`  Sistema: ${c.bold}${os.label}${c.reset} (${os.arch})\n`);
 
+  if (forceLocal) {
+    console.log(`  Modo: ${c.cyan}Local (--local)${c.reset}\n`);
+    return installLocal();
+  }
+
   process.stdout.write(`  Verificando Docker... `);
   const docker = checkDocker();
 
@@ -1186,8 +1191,9 @@ function isLocalMode() {
 // ══════════════════════════════════════════════════════
 
 const args = process.argv.slice(2);
-const command = args[0];
-const local = isLocalMode();
+const forceLocal = args.includes("--local");
+const command = args.filter((a) => a !== "--local")[0];
+const local = forceLocal || isLocalMode();
 
 switch (command) {
   case "status":

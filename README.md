@@ -87,7 +87,13 @@ No project cloning, no dependency installation. Everything runs via Docker image
 
 ### Without Docker (local mode)
 
-If Docker is not installed, the CLI runs in local mode:
+If Docker is not installed, the CLI runs in local mode automatically. You can also force local mode:
+
+```bash
+npx pipely-ai --local
+```
+
+What happens:
 
 1. Downloads a pre-built bundle from GitHub Releases
 2. Installs dependencies
@@ -135,6 +141,7 @@ npx pipely-ai start       # Start the app
 npx pipely-ai stop        # Stop (Docker) / Ctrl+C (local)
 npx pipely-ai update      # Update to latest version
 npx pipely-ai logs        # View logs (Docker only)
+npx pipely-ai --local     # Force local mode (even with Docker installed)
 npx pipely-ai help        # Show all commands
 ```
 
