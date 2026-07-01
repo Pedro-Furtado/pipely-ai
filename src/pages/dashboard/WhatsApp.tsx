@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Plus,
   MessageCircle,
+  AlertTriangle,
 } from 'lucide-react'
 import { whatsappService, type WhatsAppConfig, type EvolutionInstance } from '@/services/whatsapp'
 import { Button } from '@/components/ui/button'
@@ -72,10 +73,14 @@ export default function WhatsApp() {
   const [loadingQr, setLoadingQr] = useState<string | null>(null)
   const [statuses, setStatuses] = useState<Record<string, { state: string; name: string }>>({})
   const [checkingStatus, setCheckingStatus] = useState<string | null>(null)
-  // Webhook (global, not per instance)
+
+  // Webhook
   const [webhookUrl, setWebhookUrl] = useState('')
-  const [settingWebhook, setSettingWebhook] = useState(false)
   const [webhookInput, setWebhookInput] = useState('')
+  const [editingWebhook, setEditingWebhook] = useState(false)
+  const [savingWebhook, setSavingWebhook] = useState(false)
+
+  const isLocalWebhook = webhookUrl.includes('localhost') || webhookUrl.includes('127.0.0.1')
 
   useEffect(() => {
     loadConfig()
@@ -89,7 +94,7 @@ export default function WhatsApp() {
         if (res.data) {
           setConfig(res.data)
           loadInstances()
-          if (!res.data.isBundled) loadWebhook()
+          loadWebhook()
         }
       }
     } catch { /* silent */ }
@@ -116,28 +121,33 @@ export default function WhatsApp() {
   async function loadWebhook() {
     try {
       const res = await whatsappService.getWebhook()
-      if (res.success && res.data) {
-        setWebhookUrl(res.data.url || '')
+      if (res.success && res.data?.url) {
+        setWebhookUrl(res.data.url)
+      } else {
+        // Default webhook URL for bundled mode
+        const defaultUrl = isBundled ? 'http://app:3335/webhook' : ''
+        setWebhookUrl(defaultUrl)
+        if (!defaultUrl) setEditingWebhook(true)
       }
     } catch { /* silent */ }
   }
 
   async function handleSaveWebhook() {
     if (!webhookInput.trim()) return
-    setSettingWebhook(true)
+    setSavingWebhook(true)
     try {
       const res = await whatsappService.setWebhook(webhookInput.trim())
       if (res.success) {
         toast.success('Webhook salvo')
         setWebhookUrl(webhookInput.trim())
-        setWebhookInput('')
+        setEditingWebhook(false)
       } else {
         toast.error(res.message || 'Erro ao salvar webhook')
       }
     } catch {
       toast.error('Erro ao salvar webhook')
     } finally {
-      setSettingWebhook(false)
+      setSavingWebhook(false)
     }
   }
 
@@ -151,7 +161,6 @@ export default function WhatsApp() {
           ...prev,
           [instanceId]: { state, name: res.data!.name || '' },
         }))
-        // Clear QR if connected
         if (state === 'open' && activeQr?.instanceId === instanceId) {
           setActiveQr(null)
         }
@@ -204,20 +213,13 @@ export default function WhatsApp() {
     setShowConfig(true)
   }
 
-  function getWebhookUrl(): string | undefined {
-    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    if (isLocal) return undefined
-    // In production, agent webhook runs on port 3335 or same origin
-    return `${window.location.origin.replace(/:\d+$/, ':3335')}/webhook`
-  }
-
   async function handleCreateInstance(e: FormEvent) {
     e.preventDefault()
     if (!newInstanceName.trim()) return
 
     setCreating(true)
     try {
-      const res = await whatsappService.createInstance(newInstanceName.trim(), getWebhookUrl())
+      const res = await whatsappService.createInstance(newInstanceName.trim(), webhookUrl || undefined)
       if (res.success) {
         toast.success('Instancia criada')
         setShowCreate(false)
@@ -282,7 +284,6 @@ export default function WhatsApp() {
   // No config — setup
   if (!config) {
     if (isBundled) {
-      // Bundled mode but no config — shouldn't happen, reload
       return (
         <EmptyState
           icon={MessageCircle}
@@ -329,7 +330,7 @@ export default function WhatsApp() {
     )
   }
 
-  // Has config — show instances from Evolution
+  // Has config — show instances
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -343,7 +344,7 @@ export default function WhatsApp() {
           <Button variant="outline" size="sm" onClick={loadInstances} disabled={loadingInstances}>
             {loadingInstances ? <Spinner size="sm" /> : <RefreshCw size={14} />}
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setShowCreate(true)}>
+          <Button variant="outline" size="sm" onClick={() => setShowCreate(true)} disabled={!webhookUrl}>
             <Plus size={14} />
             Nova instancia
           </Button>
@@ -361,59 +362,66 @@ export default function WhatsApp() {
         </div>
       </div>
 
-      {/* Webhook config — only show in non-bundled mode */}
-      {!isBundled && !webhookUrl ? (
-        <Card className="border-amber-500/30 bg-amber-500/5">
-          <CardContent className="p-4 space-y-2">
-            <p className="text-sm font-medium text-amber-400">
-              <AlertCircle size={14} className="inline mr-1.5" />
-              Webhook nao configurado
-            </p>
-            <p className="text-xs text-zinc-400">
-              O agente precisa do webhook para receber respostas do WhatsApp. Cole a URL do webhook na Evolution Go e aqui.
-            </p>
-            {(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
-              <p className="text-xs text-zinc-500">
-                Em localhost, use{' '}
-                <a href="https://ngrok.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline">ngrok</a>
-                {' '}para expor a porta do agent:
-                <code className="ml-1 rounded bg-zinc-800 px-1.5 py-0.5 text-[11px] text-zinc-300">ngrok http 3335</code>
+      {/* Webhook config — always visible */}
+      <Card className={!webhookUrl || editingWebhook ? 'border-amber-500/30 bg-amber-500/5' : ''}>
+        <CardContent className="p-4 space-y-2">
+          {editingWebhook || !webhookUrl ? (
+            <>
+              <p className="text-sm font-medium text-amber-400">
+                <AlertCircle size={14} className="inline mr-1.5" />
+                {webhookUrl ? 'Alterar webhook' : 'Webhook nao configurado'}
               </p>
-            )}
-            <div className="flex gap-2 pt-1">
-              <Input
-                placeholder="https://seu-dominio.com/webhook"
-                value={webhookInput}
-                onChange={(e) => setWebhookInput(e.target.value)}
-                className="h-8 text-xs"
-              />
-              <Button size="sm" className="h-8" onClick={handleSaveWebhook} disabled={settingWebhook || !webhookInput.trim()}>
-                {settingWebhook ? <Spinner size="sm" className="h-3 w-3" /> : 'Salvar'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="flex items-center gap-2 text-xs text-zinc-400">
-          <CheckCircle2 size={12} className="text-green-500" />
-          <span>Webhook: {webhookUrl}</span>
-          <button
-            type="button"
-            onClick={() => { setWebhookInput(webhookUrl); setWebhookUrl('') }}
-            className="text-zinc-500 hover:text-zinc-300 transition-colors"
-          >
-            (alterar)
-          </button>
-        </div>
-      )}
+              <p className="text-xs text-zinc-400">
+                URL onde o agente recebe respostas do WhatsApp. Necessario para criar instancias.
+              </p>
+              <div className="flex gap-2 pt-1">
+                <Input
+                  placeholder="https://seu-dominio.com:3335/webhook"
+                  value={webhookInput}
+                  onChange={(e) => setWebhookInput(e.target.value)}
+                  className="h-8 text-xs"
+                />
+                <Button size="sm" className="h-8" onClick={handleSaveWebhook} disabled={savingWebhook || !webhookInput.trim()}>
+                  {savingWebhook ? <Spinner size="sm" className="h-3 w-3" /> : 'Salvar'}
+                </Button>
+                {webhookUrl && (
+                  <Button size="sm" variant="outline" className="h-8" onClick={() => setEditingWebhook(false)}>
+                    Cancelar
+                  </Button>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 text-xs text-zinc-400">
+                <CheckCircle2 size={12} className="text-green-500 shrink-0" />
+                <span className="truncate">Webhook: {webhookUrl}</span>
+                <button
+                  type="button"
+                  onClick={() => { setWebhookInput(webhookUrl); setEditingWebhook(true) }}
+                  className="shrink-0 text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                  (alterar)
+                </button>
+              </div>
+              {isLocalWebhook && (
+                <p className="text-[10px] text-amber-400 flex items-center gap-1">
+                  <AlertTriangle size={10} />
+                  Webhook em localhost nao recebe mensagens externas. Use um dominio ou ngrok para expor.
+                </p>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {instances.length === 0 ? (
         <EmptyState
           icon={MessageCircle}
           title="Nenhuma instancia"
-          description="Crie uma instancia para conectar seu WhatsApp."
+          description={webhookUrl ? 'Crie uma instancia para conectar seu WhatsApp.' : 'Configure o webhook primeiro para criar instancias.'}
         >
-          <Button size="sm" onClick={() => setShowCreate(true)}>
+          <Button size="sm" onClick={() => setShowCreate(true)} disabled={!webhookUrl}>
             <Plus size={14} />
             Criar instancia
           </Button>
@@ -500,7 +508,6 @@ export default function WhatsApp() {
                       <Wifi size={10} className="inline mr-1" />{status.name}
                     </p>
                   )}
-
                 </CardContent>
               </Card>
             )
@@ -547,9 +554,16 @@ export default function WhatsApp() {
             <DialogDescription>Crie uma instancia para conectar um numero de WhatsApp.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateInstance}>
-            <div className="space-y-1.5">
-              <Label htmlFor="inst-name" className="text-xs">Nome</Label>
-              <Input id="inst-name" placeholder="Ex: Atendimento, Vendas, Suporte..." value={newInstanceName} onChange={(e) => setNewInstanceName(e.target.value)} disabled={creating} autoFocus />
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="inst-name" className="text-xs">Nome</Label>
+                <Input id="inst-name" placeholder="Ex: Atendimento, Vendas, Suporte..." value={newInstanceName} onChange={(e) => setNewInstanceName(e.target.value)} disabled={creating} autoFocus />
+              </div>
+              <div className="rounded-md bg-zinc-800/50 px-3 py-2">
+                <p className="text-[10px] text-zinc-400">
+                  Webhook: <span className="text-zinc-300 font-mono">{webhookUrl}</span>
+                </p>
+              </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
