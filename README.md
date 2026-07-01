@@ -41,13 +41,18 @@ Pipely AI automates task management through visual pipelines connected to WhatsA
 
 One command. Works on **any OS** — local machine or VPS.
 
-**Requirements:** [Docker](https://docs.docker.com/get-docker/) + [Node.js 18+](https://nodejs.org/)
+**Requirements:** [Node.js 18+](https://nodejs.org/) (Docker optional)
 
 ```bash
 npx pipely-ai
 ```
 
-The installer will:
+The CLI automatically detects your environment:
+
+- **With Docker** → Full setup with containers (app + PostgreSQL + Evolution Go)
+- **Without Docker** → Local mode with SQLite (lightweight, no containers needed)
+
+### With Docker (recommended for production)
 
 1. Detect your OS (Windows, macOS, Linux)
 2. Ask you to configure ports (with availability testing)
@@ -68,7 +73,7 @@ The installer will:
     Setup Key:       2e5b1c1e-e898-...
 ```
 
-### What gets created
+#### What gets created
 
 The CLI generates 3 files in the current directory:
 
@@ -79,6 +84,26 @@ The CLI generates 3 files in the current directory:
 | `init-db.sh` | Creates the Evolution Go database on first start |
 
 No project cloning, no dependency installation. Everything runs via Docker images.
+
+### Without Docker (local mode)
+
+If Docker is not installed, the CLI runs in local mode:
+
+1. Downloads a pre-built bundle from GitHub Releases
+2. Installs dependencies
+3. Creates a SQLite database
+4. Starts frontend + backend + agent in foreground
+
+```
+  Frontend:  http://localhost:3000
+  Backend:   http://localhost:3333
+  Agent:     http://localhost:3335
+  Setup Key: 2e5b1c1e-e898-...
+
+  Pressione Ctrl+C para parar.
+```
+
+Data is stored in `~/.pipely/`. To connect WhatsApp, deploy Evolution Go separately (e.g., on [Railway](https://railway.com)) and configure the URL in the WhatsApp page.
 
 ---
 
@@ -101,17 +126,15 @@ npx pipely-ai keys
 
 ## Managing the App
 
-All commands work from the directory where you ran `npx pipely-ai`:
+Commands adapt automatically to your setup (Docker or local mode):
 
 ```bash
-npx pipely-ai status      # View containers, endpoints, domain
-npx pipely-ai keys        # View Evolution Key + Setup Key
-npx pipely-ai logs        # View app logs (Ctrl+C to exit)
-npx pipely-ai logs db     # View database logs
-npx pipely-ai stop        # Stop all containers
-npx pipely-ai start       # Start containers
-npx pipely-ai restart     # Restart containers
-npx pipely-ai update      # Pull latest image and recreate
+npx pipely-ai status      # View status and endpoints
+npx pipely-ai keys        # View Setup Key (+ Evolution Key in Docker)
+npx pipely-ai start       # Start the app
+npx pipely-ai stop        # Stop (Docker) / Ctrl+C (local)
+npx pipely-ai update      # Update to latest version
+npx pipely-ai logs        # View logs (Docker only)
 npx pipely-ai help        # Show all commands
 ```
 
