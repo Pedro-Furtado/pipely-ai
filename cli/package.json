@@ -1,6 +1,6 @@
 {
   "name": "pipely-ai",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "description": "Pipely AI — Instale, gerencie e atualize com um unico comando",
   "type": "module",
   "bin": {

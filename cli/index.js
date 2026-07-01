@@ -690,6 +690,11 @@ async function runLocal() {
 
   const childEnv = { ...process.env, ...envVars };
 
+  // Copy .env to bundle subdirs so dotenv/config finds it
+  const envRaw = readFileSync(envPath, "utf-8");
+  try { writeFileSync(join(bundleDir, "server", ".env"), envRaw); } catch {}
+  try { writeFileSync(join(bundleDir, "agent", ".env"), envRaw); } catch {}
+
   // Start server (serves frontend via SERVE_FRONTEND env)
   const server = fork(join(bundleDir, "server/dist/index.js"), [], {
     cwd: join(bundleDir, "server"),
