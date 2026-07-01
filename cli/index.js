@@ -520,7 +520,7 @@ function generateLocalEnv() {
   const setupKey = randomUUID();
   const dir = getLocalDir();
 
-  const dbPath = join(dir, "data", "pipely.db").replace(/\\/g, "/");
+  const dbPath = join(dir, "data", "pipely.db").replace(/\\/g, "/").replace(/ /g, "%20");
   const frontendPath = join(getBundleDir(), "frontend").replace(/\\/g, "/");
   const env = `# Pipely AI — Local Mode
 DATABASE_URL=file:${dbPath}
@@ -611,7 +611,7 @@ async function installLocal() {
   mkdirSync(join(dir, "data"), { recursive: true });
 
   // Setup database
-  const dbPath = join(dir, "data", "pipely.db").replace(/\\/g, "/");
+  const dbPath = join(dir, "data", "pipely.db").replace(/\\/g, "/").replace(/ /g, "%20");
   process.stdout.write(`  Criando banco de dados... `);
   try {
     execSync("npx prisma db push", {

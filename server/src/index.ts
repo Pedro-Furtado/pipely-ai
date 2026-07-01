@@ -64,7 +64,7 @@ app.get("/health", (_req, res) => {
 if (process.env.SERVE_FRONTEND) {
   const frontendPath = path.resolve(process.env.SERVE_FRONTEND);
   app.use(express.static(frontendPath));
-  app.get("*", (_req, res) => {
+  app.get("{*path}", (_req, res) => {
     res.sendFile(path.join(frontendPath, "index.html"));
   });
 }
