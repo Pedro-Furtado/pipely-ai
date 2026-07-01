@@ -12,6 +12,7 @@ import {
   CheckCheck,
   Trash2,
   Users,
+  Palette,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -29,7 +30,29 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 
-type View = 'menu' | 'notifications'
+type View = 'menu' | 'notifications' | 'theme'
+
+const THEME_COLORS = [
+  { name: 'Azul', value: '#3b82f6' },
+  { name: 'Violeta', value: '#8b5cf6' },
+  { name: 'Rosa', value: '#ec4899' },
+  { name: 'Vermelho', value: '#ef4444' },
+  { name: 'Laranja', value: '#f97316' },
+  { name: 'Amarelo', value: '#eab308' },
+  { name: 'Verde', value: '#22c55e' },
+  { name: 'Esmeralda', value: '#10b981' },
+  { name: 'Ciano', value: '#06b6d4' },
+  { name: 'Indigo', value: '#6366f1' },
+]
+
+function applyPrimaryColor(color: string) {
+  document.documentElement.style.setProperty('--color-primary', color)
+  document.documentElement.style.setProperty('--color-ring', color)
+}
+
+function getStoredColor(): string {
+  return localStorage.getItem('pipely-primary-color') || '#3b82f6'
+}
 
 interface NavUserProps {
   collapsed?: boolean
@@ -44,7 +67,13 @@ export default function NavUser({ collapsed = false }: NavUserProps) {
   const [unreadCount, setUnreadCount] = useState(0)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loadingNotifs, setLoadingNotifs] = useState(false)
+  const [activeColor, setActiveColor] = useState(getStoredColor)
   const ref = useRef<HTMLDivElement>(null)
+
+  // Apply stored color on mount
+  useEffect(() => {
+    applyPrimaryColor(activeColor)
+  }, [])
 
   const loadUnreadCount = useCallback(async () => {
     try {
@@ -214,6 +243,15 @@ export default function NavUser({ collapsed = false }: NavUserProps) {
                   <span>Minha conta</span>
                 </button>
 
+                <button
+                  type="button"
+                  onClick={() => setView('theme')}
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-50"
+                >
+                  <Palette size={16} />
+                  <span>Cor do tema</span>
+                </button>
+
                 <div className="my-1 h-px bg-zinc-800" />
 
                 <button
@@ -230,6 +268,7 @@ export default function NavUser({ collapsed = false }: NavUserProps) {
               </div>
             ) : (
               /* ── Notifications view ── */
+              view === 'notifications' ? (
               <>
                 <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2.5">
                   <div className="flex items-center gap-2">
@@ -322,7 +361,49 @@ export default function NavUser({ collapsed = false }: NavUserProps) {
                   )}
                 </div>
               </>
-            )}
+            ) : (
+              /* ── Theme view ── */
+              <>
+                <div className="flex items-center gap-2 border-b border-zinc-800 px-3 py-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setView('menu')}
+                    className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-50"
+                  >
+                    <ArrowLeft size={14} />
+                  </button>
+                  <span className="text-sm font-medium text-zinc-200">Cor do tema</span>
+                </div>
+                <div className="grid grid-cols-5 gap-2 p-3">
+                  {THEME_COLORS.map((color) => (
+                    <button
+                      key={color.value}
+                      type="button"
+                      onClick={() => {
+                        applyPrimaryColor(color.value)
+                        setActiveColor(color.value)
+                        localStorage.setItem('pipely-primary-color', color.value)
+                      }}
+                      className="group flex flex-col items-center gap-1"
+                      title={color.name}
+                    >
+                      <div
+                        className={cn(
+                          'flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all',
+                          activeColor === color.value
+                            ? 'border-white scale-110'
+                            : 'border-transparent hover:scale-105'
+                        )}
+                        style={{ backgroundColor: color.value }}
+                      >
+                        {activeColor === color.value && <Check size={14} className="text-white" />}
+                      </div>
+                      <span className="text-[9px] text-zinc-500 group-hover:text-zinc-300">{color.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ))}
           </div>
         )}
       </div>

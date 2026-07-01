@@ -185,7 +185,10 @@ export default function BlockConfigModal({ block, pipeline, open, onClose, onSav
         if (autoStatus) config.auto_status = autoStatus
         if (notifyOnEntry) config.notify_on_entry = true
         const validSchedule = scheduleEntries.filter((e) => e.time && (e.day || e.date))
-        if (validSchedule.length > 0) config.schedule = { entries: validSchedule }
+        if (validSchedule.length > 0) {
+          config.schedule = { entries: validSchedule }
+          if (nextBlockId) config.next_block_id = nextBlockId
+        }
       }
 
 

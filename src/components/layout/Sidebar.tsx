@@ -9,6 +9,7 @@ import {
   Bot,
   ChevronLeft,
   ChevronRight,
+  Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWorkspace } from '@/contexts/WorkspaceContext'
@@ -65,19 +66,30 @@ export default function Sidebar() {
     >
       {/* Header */}
       <div className="flex h-14 items-center justify-between border-b border-zinc-800 px-3">
-        {!collapsed && (
-          <span className="text-sm font-semibold text-zinc-50 truncate">
-            Pipely AI
-          </span>
-        )}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => { const next = !collapsed; setCollapsed(next); localStorage.setItem('sidebarCollapsed', String(next)) }}
-          className={cn('shrink-0', collapsed && 'mx-auto')}
+        <button
+          type="button"
+          onClick={() => { if (collapsed) { setCollapsed(false); localStorage.setItem('sidebarCollapsed', 'false') } }}
+          className={cn('flex items-center gap-2.5', collapsed && 'mx-auto cursor-pointer')}
         >
-          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-        </Button>
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/80 to-primary shadow-sm">
+            <Zap size={16} className="text-primary-foreground" />
+          </div>
+          {!collapsed && (
+            <span className="text-sm font-semibold text-zinc-50 truncate">
+              Pipely AI
+            </span>
+          )}
+        </button>
+        {!collapsed && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => { setCollapsed(true); localStorage.setItem('sidebarCollapsed', 'true') }}
+            className="shrink-0"
+          >
+            <ChevronLeft size={16} />
+          </Button>
+        )}
       </div>
 
       {/* Navigation */}
@@ -95,7 +107,7 @@ export default function Sidebar() {
                         cn(
                           'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                           isActive
-                            ? 'bg-zinc-800 text-zinc-50'
+                            ? 'bg-primary/10 text-primary'
                             : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-50',
                           collapsed && 'justify-center px-0'
                         )

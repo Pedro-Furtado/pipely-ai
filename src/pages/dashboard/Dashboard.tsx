@@ -234,7 +234,7 @@ export default function Dashboard() {
   }
 
   const timelineConfig: ChartConfig = {
-    tarefas: { label: 'Tarefas criadas', color: '#8b5cf6' },
+    tarefas: { label: 'Tarefas criadas', color: 'var(--color-primary)' },
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────
