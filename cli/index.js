@@ -449,9 +449,16 @@ function printDockerHelp(os) {
 
 // ── Local Mode ──────────────────────────────────────
 
-const PIPELY_DIR = join(process.env.HOME || process.env.USERPROFILE || ".", ".pipely");
 const BUNDLE_REPO = "Pedro-Furtado/pipely-ai";
 const BUNDLE_NAME = "pipely-local.tar.gz";
+
+function getLocalDir() {
+  return process.cwd();
+}
+
+function getBundleDir() {
+  return join(getLocalDir(), ".pipely");
+}
 
 async function getLatestReleaseUrl() {
   return new Promise((resolve) => {
@@ -500,37 +507,42 @@ function extractTarGz(file, dest) {
 }
 
 function getLocalEnvPath() {
-  return join(PIPELY_DIR, ".env");
+  return join(getLocalDir(), ".env");
 }
 
 function isLocalInstalled() {
-  return existsSync(join(PIPELY_DIR, "start.mjs")) && existsSync(join(PIPELY_DIR, "package.json"));
+  const bd = getBundleDir();
+  return existsSync(join(bd, "package.json")) && existsSync(join(bd, "server"));
 }
 
 function generateLocalEnv() {
   const jwtSecret = generateKey(64);
   const setupKey = randomUUID();
+  const dir = getLocalDir();
 
-  const dbPath = join(PIPELY_DIR, "data", "pipely.db").replace(/\\/g, "/");
+  const dbPath = join(dir, "data", "pipely.db").replace(/\\/g, "/");
+  const frontendPath = join(getBundleDir(), "frontend").replace(/\\/g, "/");
   const env = `# Pipely AI — Local Mode
 DATABASE_URL=file:${dbPath}
 JWT_SECRET=${jwtSecret}
 OWNER_SETUP_KEY=${setupKey}
-FRONTEND_URL=http://localhost:3000
+FRONTEND_URL=http://localhost:3333
 BACKEND_URL=http://localhost:3333
+SERVE_FRONTEND=${frontendPath}
 POLL_INTERVAL_MS=60000
 PORT=3333
-VITE_API_URL=http://localhost:3333
 `;
   return { env, setupKey };
 }
 
 async function installLocal() {
   const os = detectOS();
+  const dir = getLocalDir();
+  const bundleDir = getBundleDir();
 
   // Check if already installed
   if (isLocalInstalled()) {
-    console.log(`  ${c.green}✓${c.reset} Pipely AI ja instalado em ${c.dim}${PIPELY_DIR}${c.reset}\n`);
+    console.log(`  ${c.green}✓${c.reset} Pipely AI ja instalado em ${c.dim}${dir}${c.reset}\n`);
     console.log(`  Iniciando...\n`);
     return runLocal();
   }
@@ -549,8 +561,8 @@ async function installLocal() {
   }
   console.log(`${c.green}✓${c.reset}`);
 
-  const tmpFile = join(PIPELY_DIR, BUNDLE_NAME);
-  mkdirSync(PIPELY_DIR, { recursive: true });
+  const tmpFile = join(dir, BUNDLE_NAME);
+  mkdirSync(bundleDir, { recursive: true });
 
   process.stdout.write(`  Baixando bundle... `);
   try {
@@ -565,7 +577,7 @@ async function installLocal() {
   // Extract
   process.stdout.write(`  Extraindo... `);
   try {
-    extractTarGz(tmpFile, PIPELY_DIR);
+    extractTarGz(tmpFile, bundleDir);
     console.log(`${c.green}✓${c.reset}`);
   } catch (err) {
     console.log(`${c.red}✗${c.reset}`);
@@ -580,7 +592,7 @@ async function installLocal() {
   console.log(`\n  ${c.magenta}── Instalando dependencias ────────────────${c.reset}\n`);
   try {
     execSync("npm install --production --no-fund --no-audit", {
-      cwd: PIPELY_DIR,
+      cwd: bundleDir,
       stdio: "inherit",
     });
     console.log(`\n  ${c.green}✓${c.reset} Dependencias instaladas`);
@@ -596,15 +608,16 @@ async function installLocal() {
   console.log(`  ${c.green}✓${c.reset} .env gerado`);
 
   // Create data directory
-  mkdirSync(join(PIPELY_DIR, "data"), { recursive: true });
+  mkdirSync(join(dir, "data"), { recursive: true });
 
   // Setup database
+  const dbPath = join(dir, "data", "pipely.db").replace(/\\/g, "/");
   process.stdout.write(`  Criando banco de dados... `);
   try {
     execSync("npx prisma db push", {
-      cwd: join(PIPELY_DIR, "server"),
+      cwd: join(bundleDir, "server"),
       stdio: "pipe",
-      env: { ...process.env, DATABASE_URL: `file:${join(PIPELY_DIR, "data/pipely.db")}` },
+      env: { ...process.env, DATABASE_URL: `file:${dbPath}` },
     });
     console.log(`${c.green}✓${c.reset}`);
   } catch (err) {
@@ -622,8 +635,8 @@ async function installLocal() {
   console.log("");
   console.log(`  ${c.bold}Setup Key:${c.reset}       ${c.yellow}${setupKey}${c.reset}`);
   console.log("");
-  console.log(`  ${c.bold}Diretorio:${c.reset}       ${c.dim}${PIPELY_DIR}${c.reset}`);
-  console.log(`  ${c.bold}Banco de dados:${c.reset}  ${c.dim}${join(PIPELY_DIR, "data/pipely.db")}${c.reset}`);
+  console.log(`  ${c.bold}Diretorio:${c.reset}       ${c.dim}${dir}${c.reset}`);
+  console.log(`  ${c.bold}Banco de dados:${c.reset}  ${c.dim}${join(dir, "data/pipely.db")}${c.reset}`);
   console.log("");
 
   return runLocal();
@@ -634,6 +647,8 @@ async function runLocal() {
     console.log(`  ${c.red}✗ Pipely AI nao instalado. Execute: npx pipely-ai${c.reset}\n`);
     process.exit(1);
   }
+
+  const bundleDir = getBundleDir();
 
   console.log(`  ${c.magenta}── Iniciando Pipely AI ────────────────────${c.reset}\n`);
 
@@ -647,40 +662,27 @@ async function runLocal() {
 
   const childEnv = { ...process.env, ...envVars };
 
-  // Start server
-  const server = fork(join(PIPELY_DIR, "server/dist/index.js"), [], {
-    cwd: join(PIPELY_DIR, "server"),
+  // Start server (serves frontend via SERVE_FRONTEND env)
+  const server = fork(join(bundleDir, "server/dist/index.js"), [], {
+    cwd: join(bundleDir, "server"),
     env: { ...childEnv, PORT: "3333" },
     stdio: "inherit",
   });
 
   // Start agent
-  const agent = fork(join(PIPELY_DIR, "agent/dist/index.js"), [], {
-    cwd: join(PIPELY_DIR, "agent"),
+  const agent = fork(join(bundleDir, "agent/dist/index.js"), [], {
+    cwd: join(bundleDir, "agent"),
     env: { ...childEnv, PORT: "3335" },
     stdio: "inherit",
   });
 
-  // Serve frontend
-  const frontendDir = join(PIPELY_DIR, "frontend");
-  if (existsSync(frontendDir)) {
-    const express = await import("express").catch(() => null);
-    if (express) {
-      const app = express.default();
-      app.use(express.default.static(frontendDir));
-      app.get(/^\/(?!api|health).*/, (_req, res) => {
-        res.sendFile(join(frontendDir, "index.html"));
-      });
-      const fPort = envVars.FRONTEND_PORT || 3000;
-      app.listen(fPort, () => {
-        console.log(`  ${c.cyan}Frontend:${c.reset}  http://localhost:${fPort}`);
-        console.log(`  ${c.cyan}Backend:${c.reset}   http://localhost:3333`);
-        console.log(`  ${c.cyan}Agent:${c.reset}     http://localhost:3335`);
-        console.log("");
-        console.log(`  Pressione ${c.bold}Ctrl+C${c.reset} para parar.\n`);
-      });
-    }
-  }
+  // Wait for server to start then print endpoints
+  await sleep(2000);
+  console.log("");
+  console.log(`  ${c.cyan}App:${c.reset}       http://localhost:3333`);
+  console.log(`  ${c.cyan}Agent:${c.reset}     http://localhost:3335`);
+  console.log("");
+  console.log(`  Pressione ${c.bold}Ctrl+C${c.reset} para parar.\n`);
 
   function shutdown() {
     console.log(`\n  Parando...\n`);
@@ -1138,10 +1140,10 @@ async function install() {
 
 function cmdLocalKeys() {
   if (!isLocalInstalled()) {
-    console.log(`\n  ${c.red}✗ Pipely AI nao instalado localmente${c.reset}\n`);
+    console.log(`\n  ${c.red}✗ Pipely AI nao instalado nesta pasta${c.reset}\n`);
     process.exit(1);
   }
-  const env = readEnvFile(PIPELY_DIR);
+  const env = readEnvFile(getLocalDir());
   console.log("");
   console.log(`  ${c.bold}PIPELY AI — Chaves (Local)${c.reset}\n`);
   if (env.OWNER_SETUP_KEY) {
@@ -1150,7 +1152,7 @@ function cmdLocalKeys() {
   if (env.JWT_SECRET) {
     console.log(`  JWT Secret:  ${c.yellow}${env.JWT_SECRET.slice(0, 16)}...${c.reset}`);
   }
-  console.log(`\n  Diretorio:   ${c.dim}${PIPELY_DIR}${c.reset}`);
+  console.log(`\n  Diretorio:   ${c.dim}${getLocalDir()}${c.reset}`);
   console.log("");
 }
 
@@ -1204,7 +1206,7 @@ switch (command) {
   case "update":
     if (local) {
       // Delete and re-download bundle
-      try { rmSync(PIPELY_DIR, { recursive: true }); } catch {}
+      try { rmSync(getBundleDir(), { recursive: true }); } catch {}
       console.log(`\n  ${c.dim}Reinstalando...${c.reset}\n`);
       installLocal().catch((err) => {
         console.error(`\n  ${c.red}Erro: ${err.message}${c.reset}\n`);
