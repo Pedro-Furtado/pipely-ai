@@ -627,19 +627,43 @@ async function installLocal() {
 
   console.log(`\n  ${c.green}✓${c.reset} Instalacao concluida\n`);
 
-  // Print summary and run
+  printLocalSummary(setupKey, dir);
+  return runLocal();
+}
+
+function printLocalSummary(setupKey, dir) {
   const line = "═".repeat(56);
   console.log(`  ${c.green}${line}${c.reset}`);
-  console.log(`  ${c.green}${c.bold}  PIPELY AI — LOCAL MODE${c.reset}`);
+  console.log(`  ${c.green}${c.bold}  PIPELY AI — PRONTO! (Local Mode)${c.reset}`);
   console.log(`  ${c.green}${line}${c.reset}`);
   console.log("");
-  console.log(`  ${c.bold}Setup Key:${c.reset}       ${c.yellow}${setupKey}${c.reset}`);
+  console.log(`  ${c.bold}Endpoints:${c.reset}`);
+  console.log(`    Frontend + API:  ${c.cyan}http://localhost:3333${c.reset}`);
+  console.log(`    Setup:           ${c.cyan}http://localhost:3333/setup${c.reset}`);
+  console.log(`    Agent Webhook:   ${c.cyan}http://localhost:3335/webhook${c.reset}`);
+  console.log(`    Health:          ${c.cyan}http://localhost:3333/health${c.reset}`);
   console.log("");
-  console.log(`  ${c.bold}Diretorio:${c.reset}       ${c.dim}${dir}${c.reset}`);
-  console.log(`  ${c.bold}Banco de dados:${c.reset}  ${c.dim}${join(dir, "data/pipely.db")}${c.reset}`);
+  console.log(`  ${c.bold}Chaves:${c.reset}`);
+  console.log(`    Setup Key:       ${c.yellow}${setupKey}${c.reset}`);
   console.log("");
-
-  return runLocal();
+  console.log(`  ${c.bold}Arquivos:${c.reset}`);
+  console.log(`    Diretorio:       ${c.dim}${dir}${c.reset}`);
+  console.log(`    Banco de dados:  ${c.dim}${join(dir, "data/pipely.db")}${c.reset}`);
+  console.log(`    Configuracao:    ${c.dim}${join(dir, ".env")}${c.reset}`);
+  console.log("");
+  console.log(`  ${c.bold}Proximo passo:${c.reset}`);
+  console.log(`    1. Acesse ${c.cyan}http://localhost:3333/setup${c.reset}`);
+  console.log(`    2. Use a Setup Key acima para criar sua conta`);
+  console.log(`    3. Configure WhatsApp e OpenAI nas paginas do app`);
+  console.log("");
+  console.log(`  ${c.bold}Comandos:${c.reset}`);
+  console.log(`    npx pipely-ai start     ${c.dim}# Iniciar${c.reset}`);
+  console.log(`    npx pipely-ai keys      ${c.dim}# Ver chaves${c.reset}`);
+  console.log(`    npx pipely-ai update    ${c.dim}# Atualizar${c.reset}`);
+  console.log(`    npx pipely-ai --local   ${c.dim}# Forcar modo local${c.reset}`);
+  console.log("");
+  console.log(`  ${c.green}${line}${c.reset}`);
+  console.log("");
 }
 
 async function runLocal() {
@@ -650,13 +674,17 @@ async function runLocal() {
 
   const bundleDir = getBundleDir();
 
-  console.log(`  ${c.magenta}── Iniciando Pipely AI ────────────────────${c.reset}\n`);
+  const line = "═".repeat(56);
+  console.log(`  ${c.magenta}${line}${c.reset}`);
+  console.log(`  ${c.magenta}${c.bold}  PIPELY AI — Iniciando...${c.reset}`);
+  console.log(`  ${c.magenta}${line}${c.reset}`);
+  console.log("");
 
   const envPath = getLocalEnvPath();
   const envContent = existsSync(envPath) ? readFileSync(envPath, "utf-8") : "";
   const envVars = {};
-  for (const line of envContent.split("\n")) {
-    const match = line.match(/^([A-Z_]+)=(.*)$/);
+  for (const envLine of envContent.split("\n")) {
+    const match = envLine.match(/^([A-Z_]+)=(.*)$/);
     if (match) envVars[match[1]] = match[2];
   }
 
@@ -679,10 +707,19 @@ async function runLocal() {
   // Wait for server to start then print endpoints
   await sleep(2000);
   console.log("");
-  console.log(`  ${c.cyan}App:${c.reset}       http://localhost:3333`);
-  console.log(`  ${c.cyan}Agent:${c.reset}     http://localhost:3335`);
+  console.log(`  ${c.green}${line}${c.reset}`);
+  console.log(`  ${c.green}${c.bold}  PIPELY AI — Rodando${c.reset}`);
+  console.log(`  ${c.green}${line}${c.reset}`);
   console.log("");
-  console.log(`  Pressione ${c.bold}Ctrl+C${c.reset} para parar.\n`);
+  console.log(`  ${c.bold}Endpoints:${c.reset}`);
+  console.log(`    Frontend + API:  ${c.cyan}http://localhost:3333${c.reset}`);
+  console.log(`    Agent Webhook:   ${c.cyan}http://localhost:3335/webhook${c.reset}`);
+  console.log("");
+  console.log(`  ${c.bold}Setup Key:${c.reset}       ${c.yellow}${envVars.OWNER_SETUP_KEY || "ver .env"}${c.reset}`);
+  console.log("");
+  console.log(`  Pressione ${c.bold}Ctrl+C${c.reset} para parar.`);
+  console.log(`  ${c.green}${line}${c.reset}`);
+  console.log("");
 
   function shutdown() {
     console.log(`\n  Parando...\n`);
