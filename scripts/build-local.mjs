@@ -75,8 +75,8 @@ writeFileSync(
       dependencies: {
         "@prisma/client": "^7.0.0",
         "prisma": "^7.0.0",
-        "@prisma/adapter-better-sqlite3": "^7.0.0",
-        "better-sqlite3": "^11.0.0",
+        "@prisma/adapter-libsql": "^7.0.0",
+        "@libsql/client": "^0.14.0",
         bcryptjs: "^3.0.2",
         cors: "^2.8.5",
         "cookie-parser": "^1.4.7",

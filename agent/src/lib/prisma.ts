@@ -6,13 +6,11 @@ const isSQLite = databaseUrl.startsWith("file:");
 let prisma: PrismaClient;
 
 if (isSQLite) {
-  const { default: Database } = await import("better-sqlite3");
-  const { PrismaBetterSQLite3 } = await import("@prisma/adapter-better-sqlite3");
+  const { createClient } = await import("@libsql/client");
+  const { PrismaLibSQL } = await import("@prisma/adapter-libsql");
 
-  const dbPath = databaseUrl.replace("file:", "").replace("./", "");
-  const db = new Database(dbPath);
-  db.pragma("journal_mode = WAL");
-  const adapter = new PrismaBetterSQLite3(db);
+  const client = createClient({ url: databaseUrl });
+  const adapter = new PrismaLibSQL(client);
   prisma = new PrismaClient({ adapter } as any);
 } else {
   const pg = await import("pg");
