@@ -17,6 +17,12 @@
   <img src="https://img.shields.io/badge/node.js-22-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
 </p>
 
+<p align="center">
+  <a href="https://railway.com/deploy/e1uJH5?referralCode=V1tiQZ&utm_medium=integration&utm_source=template&utm_campaign=pipely-ai">
+    <img src="https://railway.com/button.svg" alt="Deploy on Railway" />
+  </a>
+</p>
+
 ---
 
 ## What is Pipely AI?
