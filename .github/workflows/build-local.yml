@@ -42,7 +42,7 @@ jobs:
           export default defineConfig({
             schema: "prisma/schema.prisma",
             datasource: {
-              url: "file:./data/pipely.db",
+              url: process.env.DATABASE_URL || "file:./data/pipely.db",
             },
           });
           CFGEOF
