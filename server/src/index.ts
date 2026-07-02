@@ -1,5 +1,6 @@
 import "dotenv/config";
 import crypto from "crypto";
+import fs from "fs";
 import http from "http";
 import path from "path";
 import express from "express";
@@ -65,9 +66,11 @@ if (process.env.SERVE_FRONTEND) {
   const frontendPath = path.resolve(process.env.SERVE_FRONTEND);
   app.use(express.static(frontendPath));
   // SPA fallback: serve index.html for non-API routes (client-side routing)
+  // Note: res.sendFile fails on Windows paths with spaces, so use fs.readFileSync
+  const indexHtml = fs.readFileSync(path.join(frontendPath, "index.html"), "utf-8");
   app.use((req, res, next) => {
     if (req.path.startsWith("/api/")) return next();
-    res.sendFile(path.join(frontendPath, "index.html"));
+    res.type("html").send(indexHtml);
   });
 }
 
