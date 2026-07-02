@@ -92,15 +92,18 @@ echo "[DB] Pushing schema..."\n\
 cd /app/server\n\
 npx prisma db push 2>&1 || echo "[DB] Push failed — check DATABASE_URL"\n\
 \n\
-# Start server\n\
+# Save external PORT for nginx, fix internal ports for server/agent\n\
+NGINX_PORT="${PORT:-80}"\n\
+\n\
+# Start server (always port 3333 — nginx proxies to it)\n\
 echo "[SERVER] Starting on port 3333..."\n\
-node dist/index.js &\n\
+PORT=3333 node dist/index.js &\n\
 sleep 3\n\
 \n\
-# Start agent\n\
+# Start agent (always port 3335 — nginx proxies to it)\n\
 echo "[AGENT] Starting on port 3335..."\n\
 cd /app/agent\n\
-node dist/index.js &\n\
+PORT=3335 node dist/index.js &\n\
 \n\
 # Show endpoints banner\n\
 EVOKEY="${EVOLUTION_API_KEY:-nao configurado}"\n\
@@ -110,7 +113,7 @@ echo "  PIPELY AI — RODANDO"\n\
 echo "========================================================"\n\
 echo ""\n\
 echo "  Endpoints (internos do container):"\n\
-echo "    Frontend (nginx):  porta 80"\n\
+echo "    Frontend (nginx):  porta $NGINX_PORT"\n\
 echo "    Backend API:       porta 3333"\n\
 echo "    Agent Webhook:     porta 3335"\n\
 echo ""\n\
@@ -121,8 +124,13 @@ echo "  Veja .env para conferir as portas mapeadas."\n\
 echo "========================================================"\n\
 echo ""\n\
 \n\
+# Railway injects PORT env var — update nginx to listen on it\n\
+if [ "$NGINX_PORT" != "80" ]; then\n\
+  sed -i "s/listen 80/listen $NGINX_PORT/" /etc/nginx/http.d/default.conf\n\
+fi\n\
+\n\
 # Start nginx (foreground)\n\
-echo "[NGINX] Ready on port 80"\n\
+echo "[NGINX] Ready on port $NGINX_PORT"\n\
 nginx -g "daemon off;"\n\
 ' > /app/start.sh && chmod +x /app/start.sh
 
