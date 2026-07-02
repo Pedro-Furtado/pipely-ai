@@ -6,6 +6,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { execSync, fork } from "node:child_process";
 import { writeFileSync, readFileSync, existsSync, mkdirSync, unlinkSync, rmSync, createWriteStream } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { platform, release, arch } from "node:os";
 import http from "node:http";
 import https from "node:https";
@@ -515,15 +516,18 @@ function isLocalInstalled() {
   return existsSync(join(bd, "package.json")) && existsSync(join(bd, "server"));
 }
 
+const EP_PORT = 5433;
+const EP_USER = "pipely";
+const EP_DB = "pipely_ai";
+
 function generateLocalEnv() {
   const jwtSecret = generateKey(64);
   const setupKey = randomUUID();
-  const dir = getLocalDir();
-
-  const dbPath = join(dir, "data", "pipely.db").replace(/\\/g, "/");
+  const dbPassword = generateKey(16);
   const frontendPath = join(getBundleDir(), "frontend").replace(/\\/g, "/");
   const env = `# Pipely AI — Local Mode
-DATABASE_URL=file:${dbPath}
+DATABASE_URL=postgresql://${EP_USER}:${dbPassword}@127.0.0.1:${EP_PORT}/${EP_DB}
+DB_PASSWORD=${dbPassword}
 JWT_SECRET=${jwtSecret}
 OWNER_SETUP_KEY=${setupKey}
 FRONTEND_URL=http://localhost:3333
@@ -535,6 +539,36 @@ PORT=3333
   return { env, setupKey };
 }
 
+async function loadEmbeddedPostgres(bundleDir) {
+  const epEntry = join(bundleDir, "node_modules", "embedded-postgres", "index.js");
+  const mod = await import(pathToFileURL(epEntry).href);
+  return mod.default;
+}
+
+async function startPostgres(bundleDir, dataDir, password) {
+  const EmbeddedPostgres = await loadEmbeddedPostgres(bundleDir);
+  const pg = new EmbeddedPostgres({
+    databaseDir: dataDir,
+    user: EP_USER,
+    password: password,
+    port: EP_PORT,
+    persistent: true,
+  });
+
+  const needsInit = !existsSync(join(dataDir, "PG_VERSION"));
+  if (needsInit) {
+    await pg.initialise();
+  }
+
+  await pg.start();
+
+  if (needsInit) {
+    try { await pg.createDatabase(EP_DB); } catch {}
+  }
+
+  return pg;
+}
+
 async function installLocal() {
   const os = detectOS();
   const dir = getLocalDir();
@@ -544,7 +578,7 @@ async function installLocal() {
   if (isLocalInstalled()) {
     console.log(`  ${c.green}✓${c.reset} Pipely AI ja instalado em ${c.dim}${dir}${c.reset}\n`);
     console.log(`  Iniciando...\n`);
-    return runLocal();
+    return runLocal(null);
   }
 
   // Download bundle
@@ -607,17 +641,30 @@ async function installLocal() {
   writeFileSync(getLocalEnvPath(), envContent);
   console.log(`  ${c.green}✓${c.reset} .env gerado`);
 
-  // Create data directory
-  mkdirSync(join(dir, "data"), { recursive: true });
+  // Parse DB_PASSWORD from generated env
+  const dbPassword = envContent.match(/DB_PASSWORD=(.+)/)?.[1] || generateKey(16);
+  const dataDir = join(dir, "data", "db");
 
-  // Setup database
-  const dbPath = join(dir, "data", "pipely.db").replace(/\\/g, "/");
-  process.stdout.write(`  Criando banco de dados... `);
+  // Start embedded PostgreSQL
+  process.stdout.write(`  Iniciando PostgreSQL... `);
+  let pg;
+  try {
+    pg = await startPostgres(bundleDir, dataDir, dbPassword);
+    console.log(`${c.green}✓${c.reset}`);
+  } catch (err) {
+    console.log(`${c.red}✗${c.reset}`);
+    console.log(`  ${c.red}Erro: ${err.message}${c.reset}\n`);
+    process.exit(1);
+  }
+
+  // Setup database schema
+  const databaseUrl = `postgresql://${EP_USER}:${dbPassword}@127.0.0.1:${EP_PORT}/${EP_DB}`;
+  process.stdout.write(`  Criando tabelas... `);
   try {
     execSync("npx prisma db push", {
       cwd: join(bundleDir, "server"),
       stdio: "pipe",
-      env: { ...process.env, DATABASE_URL: `file:${dbPath}` },
+      env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     console.log(`${c.green}✓${c.reset}`);
   } catch (err) {
@@ -628,7 +675,7 @@ async function installLocal() {
   console.log(`\n  ${c.green}✓${c.reset} Instalacao concluida\n`);
 
   printLocalSummary(setupKey, dir);
-  return runLocal();
+  return runLocal(pg);
 }
 
 function printLocalSummary(setupKey, dir) {
@@ -648,7 +695,7 @@ function printLocalSummary(setupKey, dir) {
   console.log("");
   console.log(`  ${c.bold}Arquivos:${c.reset}`);
   console.log(`    Diretorio:       ${c.dim}${dir}${c.reset}`);
-  console.log(`    Banco de dados:  ${c.dim}${join(dir, "data/pipely.db")}${c.reset}`);
+  console.log(`    Banco de dados:  ${c.dim}PostgreSQL (porta ${EP_PORT})${c.reset}`);
   console.log(`    Configuracao:    ${c.dim}${join(dir, ".env")}${c.reset}`);
   console.log("");
   console.log(`  ${c.bold}Proximo passo:${c.reset}`);
@@ -666,12 +713,13 @@ function printLocalSummary(setupKey, dir) {
   console.log("");
 }
 
-async function runLocal() {
+async function runLocal(existingPg) {
   if (!isLocalInstalled()) {
     console.log(`  ${c.red}✗ Pipely AI nao instalado. Execute: npx pipely-ai${c.reset}\n`);
     process.exit(1);
   }
 
+  const dir = getLocalDir();
   const bundleDir = getBundleDir();
 
   const line = "═".repeat(56);
@@ -686,6 +734,22 @@ async function runLocal() {
   for (const envLine of envContent.split("\n")) {
     const match = envLine.match(/^([A-Z_]+)=(.*)$/);
     if (match) envVars[match[1]] = match[2];
+  }
+
+  // Start embedded PostgreSQL if not already running
+  let pg = existingPg;
+  if (!pg) {
+    const dbPassword = envVars.DB_PASSWORD || "";
+    const dataDir = join(dir, "data", "db");
+    process.stdout.write(`  Iniciando PostgreSQL... `);
+    try {
+      pg = await startPostgres(bundleDir, dataDir, dbPassword);
+      console.log(`${c.green}✓${c.reset}`);
+    } catch (err) {
+      console.log(`${c.red}✗${c.reset}`);
+      console.log(`  ${c.red}Erro: ${err.message}${c.reset}\n`);
+      process.exit(1);
+    }
   }
 
   const childEnv = { ...process.env, ...envVars };
@@ -726,17 +790,18 @@ async function runLocal() {
   console.log(`  ${c.green}${line}${c.reset}`);
   console.log("");
 
-  function shutdown() {
+  async function shutdown() {
     console.log(`\n  Parando...\n`);
     server.kill();
     agent.kill();
+    try { await pg.stop(); } catch {}
     process.exit(0);
   }
 
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
-  server.on("exit", (code) => { if (code) { agent.kill(); process.exit(1); } });
-  agent.on("exit", (code) => { if (code) { server.kill(); process.exit(1); } });
+  server.on("exit", (code) => { if (code) { agent.kill(); pg.stop().finally(() => process.exit(1)); } });
+  agent.on("exit", (code) => { if (code) { server.kill(); pg.stop().finally(() => process.exit(1)); } });
 
   // Keep process alive
   await new Promise(() => {});

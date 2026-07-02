@@ -64,7 +64,9 @@ app.get("/health", (_req, res) => {
 if (process.env.SERVE_FRONTEND) {
   const frontendPath = path.resolve(process.env.SERVE_FRONTEND);
   app.use(express.static(frontendPath));
-  app.get("{*path}", (_req, res) => {
+  // SPA fallback: serve index.html for non-API routes (client-side routing)
+  app.use((req, res, next) => {
+    if (req.path.startsWith("/api/")) return next();
     res.sendFile(path.join(frontendPath, "index.html"));
   });
 }

@@ -33,20 +33,9 @@ jobs:
       - name: Build frontend
         run: npx vite build
 
-      - name: Setup SQLite schema
+      - name: Generate Prisma client
         run: |
-          cp server/prisma/schema.sqlite.prisma server/prisma/schema.prisma
-          cat > server/prisma.config.ts << 'CFGEOF'
-          import "dotenv/config";
-          import { defineConfig } from "prisma/config";
-          export default defineConfig({
-            schema: "prisma/schema.prisma",
-            datasource: {
-              url: process.env.DATABASE_URL || "file:./data/pipely.db",
-            },
-          });
-          CFGEOF
-          cd server && npx prisma generate
+          cd server && DATABASE_URL="postgresql://dummy@localhost/dummy" npx prisma generate
 
       - name: Compile server
         run: cd server && npx tsc --outDir dist-compiled || true
@@ -79,7 +68,9 @@ jobs:
             "private": true,
             "dependencies": {
               "@prisma/client": "^7.0.0",
-              "@prisma/adapter-libsql": "^7.0.0",
+              "@prisma/adapter-pg": "^7.0.0",
+              "pg": "^8.16.0",
+              "embedded-postgres": "^18.4.0-beta.17",
               "prisma": "^7.0.0",
               "bcryptjs": "^3.0.2",
               "cors": "^2.8.5",
