@@ -540,7 +540,7 @@ PORT=3333
 }
 
 async function loadEmbeddedPostgres(bundleDir) {
-  const epEntry = join(bundleDir, "node_modules", "embedded-postgres", "index.js");
+  const epEntry = join(bundleDir, "node_modules", "embedded-postgres", "dist", "index.js");
   const mod = await import(pathToFileURL(epEntry).href);
   return mod.default;
 }
