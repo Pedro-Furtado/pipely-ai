@@ -4,12 +4,13 @@ import { prisma } from "../lib/prisma.js";
 let ownerExists: boolean | null = null;
 
 export async function setupGuard(req: Request, res: Response, next: NextFunction) {
-  // Always allow setup and health endpoints
+  // Always allow setup, health, and non-API requests (frontend static files)
   const path = req.path;
   if (
     path === "/api/auth/setup-status" ||
     path === "/api/auth/setup" ||
-    path === "/health"
+    path === "/health" ||
+    !path.startsWith("/api/")
   ) {
     next();
     return;
