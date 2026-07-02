@@ -50,7 +50,7 @@ npx pipely-ai
 The CLI automatically detects your environment:
 
 - **With Docker** → Full setup with containers (app + PostgreSQL + Evolution Go)
-- **Without Docker** → Local mode with SQLite (lightweight, no containers needed)
+- **Without Docker** → Local mode with embedded PostgreSQL (no containers needed)
 
 ### With Docker (recommended for production)
 
@@ -97,25 +97,25 @@ What happens:
 
 1. Downloads a pre-built bundle from GitHub Releases
 2. Installs dependencies
-3. Creates a SQLite database
-4. Starts frontend + backend + agent in foreground
+3. Starts embedded PostgreSQL (port 5433, data in `./data/db/`)
+4. Creates database tables
+5. Starts frontend + backend + agent on the same port
 
 ```
-  Frontend:  http://localhost:3000
-  Backend:   http://localhost:3333
-  Agent:     http://localhost:3335
-  Setup Key: 2e5b1c1e-e898-...
+  Frontend + API:  http://localhost:3333
+  Agent Webhook:   http://localhost:3335/webhook
+  Setup Key:       2e5b1c1e-e898-...
 
   Pressione Ctrl+C para parar.
 ```
 
-Data is stored in `~/.pipely/`. To connect WhatsApp, deploy Evolution Go separately (e.g., on [Railway](https://railway.com)) and configure the URL in the WhatsApp page.
+Data persists in `./data/db/` — stop and restart without losing anything. To connect WhatsApp, deploy Evolution Go separately (e.g., on [Railway](https://railway.com)) and configure the URL in the WhatsApp page.
 
 ---
 
 ## First-Time Setup
 
-1. **Open** the Frontend URL shown after install (e.g. `http://localhost:3000/setup`)
+1. **Open** the Frontend URL shown after install (e.g. `http://localhost:3333/setup` or `http://localhost:3000/setup`)
 2. **Enter the Setup Key** (shown in the install summary and in container logs)
 3. **Create your owner account** (name, email, password)
 4. **Login** and start using
