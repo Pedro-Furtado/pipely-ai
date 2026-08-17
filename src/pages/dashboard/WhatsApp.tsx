@@ -64,6 +64,8 @@ export default function WhatsApp() {
   const [showCreate, setShowCreate] = useState(false)
   const [newInstanceName, setNewInstanceName] = useState('')
   const [creating, setCreating] = useState(false)
+  const [licenseLoading, setLicenseLoading] = useState(false)
+  const [licenseError, setLicenseError] = useState<string | null>(null)
 
   // Delete instance
   const [deletingInstance, setDeletingInstance] = useState<EvolutionInstance | null>(null)
@@ -213,24 +215,73 @@ export default function WhatsApp() {
     setShowConfig(true)
   }
 
-  async function handleCreateInstance(e: FormEvent) {
-    e.preventDefault()
+  async function handleCreateInstance(e?: FormEvent) {
+    if (e) e.preventDefault()
     if (!newInstanceName.trim()) return
 
     setCreating(true)
+    setLicenseError(null)
     try {
       const res = await whatsappService.createInstance(newInstanceName.trim(), webhookUrl || undefined)
       if (res.success) {
         toast.success('Instancia criada')
         setShowCreate(false)
         setNewInstanceName('')
+        setLicenseError(null)
         loadInstances()
       }
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { message?: string } } }
+      const axiosErr = err as { response?: { data?: { message?: string; licenseRequired?: boolean } } }
+      if (axiosErr.response?.data?.licenseRequired) {
+        // License not activated — trigger activation flow
+        setLicenseLoading(true)
+        setLicenseError('Ativando licenca...')
+        try {
+          const licRes = await whatsappService.getLicenseStatus()
+          if (licRes.active) {
+            // Already active — retry
+            setLicenseLoading(false)
+            setLicenseError(null)
+            handleCreateInstance()
+            return
+          }
+          if (licRes.registerUrl) {
+            setLicenseError('Registre-se para ativar. Uma janela sera aberta...')
+            const popup = window.open(licRes.registerUrl, 'evo-license', 'width=600,height=700,scrollbars=yes')
+            // Poll for activation
+            const checkInterval = setInterval(async () => {
+              try {
+                const statusRes = await whatsappService.getLicenseStatus()
+                if (statusRes.active) {
+                  clearInterval(checkInterval)
+                  if (popup && !popup.closed) popup.close()
+                  setLicenseLoading(false)
+                  setLicenseError(null)
+                  handleCreateInstance()
+                }
+              } catch { /* keep polling */ }
+            }, 3000)
+            // Timeout after 2 minutes
+            setTimeout(() => {
+              clearInterval(checkInterval)
+              setLicenseLoading(false)
+              setCreating(false)
+              setLicenseError('Tempo esgotado. Tente novamente.')
+            }, 120000)
+            return
+          }
+          setLicenseError('Nao foi possivel iniciar ativacao da licenca')
+          setLicenseLoading(false)
+        } catch {
+          setLicenseError('Erro ao verificar licenca')
+          setLicenseLoading(false)
+        }
+        setCreating(false)
+        return
+      }
       toast.error(axiosErr.response?.data?.message || 'Erro ao criar instancia')
     } finally {
-      setCreating(false)
+      if (!licenseLoading) setCreating(false)
     }
   }
 
@@ -564,9 +615,15 @@ export default function WhatsApp() {
                   Webhook: <span className="text-zinc-300 font-mono">{webhookUrl}</span>
                 </p>
               </div>
+              {licenseError && (
+                <div className="flex items-center gap-2 text-xs">
+                  {licenseLoading && <Spinner size="sm" className="h-3 w-3" />}
+                  <p className={licenseLoading ? 'text-amber-400' : 'text-red-400'}>{licenseError}</p>
+                </div>
+              )}
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
+              <Button type="button" variant="outline" onClick={() => { setShowCreate(false); setLicenseError(null); setLicenseLoading(false) }}>Cancelar</Button>
               <Button type="submit" disabled={creating || !newInstanceName.trim()}>
                 {creating ? <Spinner size="sm" /> : 'Criar'}
               </Button>

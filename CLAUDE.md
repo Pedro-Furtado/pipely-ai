@@ -520,6 +520,70 @@ Export inclui block.id pra permitir re-import correto.
 
 Eventos disponiveis: ALL, MESSAGE, SEND_MESSAGE, READ_RECEIPT, PRESENCE, CONNECTION, CALL, GROUP, etc.
 
+## Deploy no Railway
+
+### Template One-Click
+- Template URL: https://railway.com/deploy/e1uJH5
+- Botao no README: `[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/e1uJH5?referralCode=V1tiQZ)`
+- Sobe automaticamente: PostgreSQL + Pipely AI (Dockerfile)
+- Evolution Go: deploy separado usando template proprio do Evolution
+
+### Servicos no Railway
+| Servico | Origem | Porta |
+|---------|--------|-------|
+| PostgreSQL | Plugin Railway | 5432 (auto) |
+| Pipely AI | GitHub repo (Dockerfile) | 8080 (nginx) |
+| Evolution Go | Template separado | 8080 |
+
+### Variaveis Pipely AI (auto-geradas pelo template)
+```
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+JWT_SECRET=${{secret(64)}}
+FRONTEND_URL=https://${{RAILWAY_PUBLIC_DOMAIN}}
+BACKEND_URL=http://127.0.0.1:3333
+EVOLUTION_SERVER_URL=http://${{evolution.RAILWAY_PRIVATE_DOMAIN}}:8080
+EVOLUTION_API_KEY=${{evolution.GLOBAL_API_KEY}}
+EVOLUTION_PORT=8080
+POLL_INTERVAL_MS=60000
+NODE_ENV=production
+```
+
+### Variaveis Evolution Go
+```
+GLOBAL_API_KEY=${{secret(32)}}
+CLIENT_NAME=pipely
+SERVER_PORT=8080
+DATABASE_SAVE_MESSAGES=true
+POSTGRES_AUTH_DB=${{Postgres.DATABASE_URL}}
+POSTGRES_USERS_DB=${{Postgres.DATABASE_URL}}
+PORT=8080
+```
+
+### Arquitetura no container (Railway)
+- Nginx escuta na porta `$PORT` (Railway injeta, default 80)
+- Server forcado na porta 3333 (interno)
+- Agent forcado na porta 3335 (interno)
+- Nginx roteia `/api/*` → server:3333, `/webhook` → agent:3335, `/*` → frontend static
+- `railway.toml` na raiz configura builder, healthcheck e restart policy
+
+### Webhook no Railway
+- URL: `https://<dominio>.up.railway.app/webhook`
+- Sem porta explicita — nginx faz proxy pra agent:3335
+
+### Config as Code
+```toml
+# railway.toml
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
+```
+
 ## Comandos
 
 ### Docker (producao / uso normal)
@@ -634,3 +698,5 @@ cd cli && npm publish        # Publica create-pipely no npm
 - **SPA fallback local**: `fs.readFileSync` + `res.send` (res.sendFile falha no Windows com espacos no path)
 - **setupGuard bypass**: paths nao-/api/ passam direto (frontend static files em local mode)
 - **Prisma 7 adapter API**: PrismaLibSql/PrismaPg sao factories, recebem config direto (nao client pre-criado)
+- **Railway PORT conflict**: Railway injeta PORT env var que server e agent liam; start.sh agora forca PORT=3333 (server) e PORT=3335 (agent), salva PORT original pra nginx
+- **Railway template**: variaveis auto-geradas via `${{secret()}}`, referencias cruzadas via `${{Servico.VAR}}`

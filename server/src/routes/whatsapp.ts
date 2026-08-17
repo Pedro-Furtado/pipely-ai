@@ -4,6 +4,56 @@ import { logger } from "../lib/logger.js";
 import { authenticate } from "../middleware/auth.js";
 
 const router = Router();
+
+// ─── LICENSE CALLBACK (public — no auth, called by Evolution licensing server) ─
+router.get("/license/callback", async (_req: Request, res: Response) => {
+  const code = _req.query.code as string;
+
+  const htmlResponse = (message: string, success: boolean) => {
+    res.setHeader("Content-Type", "text/html");
+    res.send(`<!DOCTYPE html>
+<html><head><title>Licenca</title></head>
+<body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#111;color:#fff">
+  <div style="text-align:center">
+    <p style="font-size:18px">${success ? "&#10004;" : "&#10006;"} ${message}</p>
+    <p style="color:#888;font-size:14px">Esta janela vai fechar automaticamente...</p>
+  </div>
+  <script>setTimeout(function(){ window.close() }, 1500)</script>
+</body></html>`);
+  };
+
+  if (!code) {
+    htmlResponse("Codigo nao recebido", false);
+    return;
+  }
+
+  try {
+    const owner = await prisma.user.findFirst({ where: { isOwner: true } });
+    if (!owner) { htmlResponse("Owner nao encontrado", false); return; }
+
+    const config = await prisma.whatsAppConfig.findUnique({ where: { userId: owner.id } });
+    if (!config) { htmlResponse("WhatsApp nao configurado", false); return; }
+
+    const activateRes = await fetch(
+      `${config.serverUrl}/license/activate?code=${encodeURIComponent(code)}`,
+      { headers: { apikey: config.globalApiKey } }
+    );
+
+    if (activateRes.ok) {
+      logger.info("WHATSAPP", "License activated via callback");
+      htmlResponse("Licenca ativada com sucesso!", true);
+    } else {
+      const text = await activateRes.text();
+      logger.error("WHATSAPP", "License activation failed", { status: activateRes.status, text });
+      htmlResponse("Falha ao ativar licenca", false);
+    }
+  } catch (error) {
+    logger.error("WHATSAPP", "License callback error", error);
+    htmlResponse("Erro ao ativar licenca", false);
+  }
+});
+
+// ─── Authenticated routes ────────────────────────────────────────────────────
 router.use(authenticate);
 
 // ─── CONFIG (only credentials, no instance data) ─────────────────────────────
@@ -169,12 +219,14 @@ router.post("/instances", async (req: Request, res: Response) => {
 
     // Auto-detect webhook URL:
     // 1. Explicit webhookUrl from frontend
-    // 2. Bundled mode (EVOLUTION_SERVER_URL set) — agent is at http://app:3335/webhook
-    // 3. BACKEND_URL based — derive agent URL
+    // 2. FRONTEND_URL (Railway/VPS) → public URL /webhook
+    // 3. Docker Compose fallback → http://app:3335/webhook
     let resolvedWebhook = webhookUrl?.trim() || "";
     if (!resolvedWebhook && process.env.EVOLUTION_SERVER_URL) {
-      // Bundled mode — use internal Docker network
-      resolvedWebhook = "http://app:3335/webhook";
+      const frontendUrl = process.env.FRONTEND_URL;
+      resolvedWebhook = frontendUrl
+        ? `${frontendUrl.replace(/\/+$/, "")}/webhook`
+        : "http://app:3335/webhook";
     }
 
     const createBody: Record<string, unknown> = {
@@ -191,6 +243,12 @@ router.post("/instances", async (req: Request, res: Response) => {
     const result = await evolutionFetch(req.userId, "/instance/create", "POST", createBody);
 
     const data = result.data as Record<string, unknown>;
+
+    // License not activated — tell frontend to trigger activation flow
+    if (result.status === 503 || String(data?.message ?? data?.error ?? "").toLowerCase().includes("license")) {
+      res.status(503).json({ success: false, message: "Licenca nao ativada", licenseRequired: true });
+      return;
+    }
 
     if (data?.error) {
       res.status(400).json({ success: false, message: String(data.error) });
@@ -311,9 +369,12 @@ router.post("/instances/:instanceId/connect", async (req: Request, res: Response
     const config = await prisma.whatsAppConfig.findUnique({ where: { userId: req.userId } });
     const webhookUrl = config?.webhookUrl || req.body?.webhookUrl || "";
 
-    // Bundled mode — use internal agent URL
+    // Bundled mode — FRONTEND_URL (Railway/VPS) or Docker Compose fallback
     if (!webhookUrl && process.env.EVOLUTION_SERVER_URL) {
-      connectBody.webhookUrl = "http://app:3335/webhook";
+      const frontendUrl = process.env.FRONTEND_URL;
+      connectBody.webhookUrl = frontendUrl
+        ? `${frontendUrl.replace(/\/+$/, "")}/webhook`
+        : "http://app:3335/webhook";
       connectBody.subscribe = ["MESSAGE"];
     } else if (webhookUrl) {
       connectBody.webhookUrl = webhookUrl;
@@ -393,6 +454,56 @@ router.post("/webhook", async (req: Request, res: Response) => {
     res.json({ success: true, message: "Webhook salvo" });
   } catch (error) {
     logger.error("WHATSAPP", "Set webhook failed", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+// ─── LICENSE (Evolution Go registration) ──────────────────────────────────────
+
+// GET /api/whatsapp/license — check status or start registration
+router.get("/license", async (req: Request, res: Response) => {
+  try {
+    const config = await prisma.whatsAppConfig.findUnique({ where: { userId: req.userId } });
+    if (!config) {
+      res.status(400).json({ success: false, message: "WhatsApp nao configurado" });
+      return;
+    }
+
+    // 1. Check license status
+    try {
+      const statusRes = await fetch(`${config.serverUrl}/license/status`, {
+        headers: { apikey: config.globalApiKey },
+      });
+      if (statusRes.ok) {
+        const statusData = await statusRes.json() as Record<string, unknown>;
+        const d = (statusData?.data ?? statusData) as Record<string, unknown>;
+        const active = d?.active ?? d?.Active ?? d?.licensed ?? d?.Licensed ?? d?.status === "active";
+        if (active) {
+          res.json({ success: true, active: true });
+          return;
+        }
+      }
+    } catch { /* non-fatal */ }
+
+    // 2. Not active — start registration
+    const frontendUrl = process.env.FRONTEND_URL || `http://localhost:${process.env.PORT || 3333}`;
+    const redirectUri = `${frontendUrl.replace(/\/+$/, "")}/api/whatsapp/license/callback`;
+
+    try {
+      const regRes = await fetch(
+        `${config.serverUrl}/license/register?redirect_uri=${encodeURIComponent(redirectUri)}`,
+        { headers: { apikey: config.globalApiKey } }
+      );
+      const regData = await regRes.json() as Record<string, unknown>;
+      const nested = (regData?.data ?? regData) as Record<string, unknown>;
+      const registerUrl = nested?.register_url ?? nested?.url ?? null;
+
+      res.json({ success: true, active: false, registerUrl });
+    } catch {
+      res.json({ success: true, active: false, error: "Erro ao verificar licenca" });
+    }
+  } catch (error) {
+    logger.error("WHATSAPP", "License check failed", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 });

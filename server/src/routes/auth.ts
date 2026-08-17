@@ -78,14 +78,21 @@ router.post("/setup", async (req: Request, res: Response) => {
     const evolutionKey = process.env.EVOLUTION_API_KEY;
     if (evolutionUrl && evolutionKey) {
       try {
+        // Auto-detect webhook URL: FRONTEND_URL (Railway/VPS) or Docker Compose fallback
+        const frontendUrl = process.env.FRONTEND_URL;
+        const webhookUrl = frontendUrl
+          ? `${frontendUrl.replace(/\/+$/, "")}/webhook`
+          : "http://app:3335/webhook";
+
         await prisma.whatsAppConfig.create({
           data: {
             userId: user.id,
             serverUrl: evolutionUrl,
             globalApiKey: evolutionKey,
+            webhookUrl,
           },
         });
-        logger.info("AUTH", "Auto-configured WhatsApp (bundled Evolution Go)");
+        logger.info("AUTH", "Auto-configured WhatsApp (bundled Evolution Go)", { webhookUrl });
       } catch {
         logger.warn("AUTH", "Could not auto-configure WhatsApp");
       }

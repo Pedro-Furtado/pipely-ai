@@ -80,4 +80,9 @@ export const whatsappService = {
     const res = await api.post('/api/whatsapp/webhook', { url })
     return res.data
   },
+
+  async getLicenseStatus(): Promise<ApiResponse & { active?: boolean; registerUrl?: string | null }> {
+    const res = await api.get('/api/whatsapp/license')
+    return res.data
+  },
 }
