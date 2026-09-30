@@ -128,16 +128,16 @@ export default function SortablePhase({ phase, pipeline, onUpdate, onAddTask, on
       )}
     >
       {/* Phase header */}
-      <div className="mb-2 flex items-center gap-1.5">
+      <div className="mb-3 flex items-center gap-2">
         <button
           type="button"
           className="cursor-grab text-zinc-600 hover:text-zinc-400 touch-none"
           {...attributes}
           {...listeners}
         >
-          <GripVertical size={14} />
+          <GripVertical size={16} />
         </button>
-        <div className={cn('h-2.5 w-2.5 rounded-full', COLOR_MAP[phase.color] || 'bg-zinc-500')} />
+        <div className={cn('h-3 w-3 rounded-full', COLOR_MAP[phase.color] || 'bg-zinc-500')} />
         {editing ? (
           <Input
             value={editName}
@@ -148,12 +148,12 @@ export default function SortablePhase({ phase, pipeline, onUpdate, onAddTask, on
               if (e.key === 'Escape') setEditing(false)
             }}
             autoFocus
-            className="h-6 w-28 text-xs"
+            className="h-7 w-32 text-sm"
           />
         ) : (
-          <span className="text-xs font-medium text-zinc-300">{phase.name}</span>
+          <span className="text-sm font-semibold text-zinc-200">{phase.name}</span>
         )}
-        <span className="text-[10px] text-zinc-600">{totalTasks}</span>
+        <span className="text-xs text-zinc-600 tabular-nums">{totalTasks}</span>
 
         <DropdownMenu>
           <DropdownMenuTrigger className="ml-auto rounded p-0.5 text-zinc-600 hover:bg-zinc-800 hover:text-zinc-400">
@@ -216,7 +216,7 @@ export default function SortablePhase({ phase, pipeline, onUpdate, onAddTask, on
 
           {/* Add block */}
           {addingBlock ? (
-            <div className="flex-none w-48 rounded-lg border border-dashed border-zinc-700 bg-zinc-900/30 p-2">
+            <div className="flex-none w-56 sm:w-64 rounded-xl border border-dashed border-zinc-700 bg-zinc-900/30 p-3">
               <Input
                 placeholder="Nome do bloco"
                 value={newBlockName}
@@ -226,13 +226,13 @@ export default function SortablePhase({ phase, pipeline, onUpdate, onAddTask, on
                   if (e.key === 'Escape') setAddingBlock(false)
                 }}
                 autoFocus
-                className="mb-2 h-6 text-[11px]"
+                className="mb-2 h-8 text-xs"
               />
-              <div className="flex gap-1">
-                <Button size="sm" onClick={handleAddBlock} disabled={!newBlockName.trim()} className="h-5 text-[10px]">
+              <div className="flex gap-1.5">
+                <Button size="sm" onClick={handleAddBlock} disabled={!newBlockName.trim()} className="h-7 text-xs">
                   Criar
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setAddingBlock(false)} className="h-5 text-[10px]">
+                <Button size="sm" variant="ghost" onClick={() => setAddingBlock(false)} className="h-7 text-xs">
                   Cancelar
                 </Button>
               </div>
@@ -241,9 +241,9 @@ export default function SortablePhase({ phase, pipeline, onUpdate, onAddTask, on
             <button
               type="button"
               onClick={() => setAddingBlock(true)}
-              className="flex-none flex min-h-[128px] w-10 items-center justify-center rounded-lg border border-dashed border-zinc-800 text-zinc-600 transition-colors hover:border-zinc-600 hover:text-zinc-400"
+              className="flex-none flex min-h-[140px] w-12 items-center justify-center rounded-xl border-2 border-dashed border-zinc-800 text-zinc-600 transition-colors hover:border-zinc-600 hover:text-zinc-400"
             >
-              <Plus size={14} />
+              <Plus size={16} />
             </button>
           )}
         </div>

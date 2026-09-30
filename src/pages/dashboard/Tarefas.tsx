@@ -1,6 +1,6 @@
-import { useState, useEffect, type FormEvent } from 'react'
+import { useState, useEffect, useMemo, type FormEvent } from 'react'
 import { toast } from 'sonner'
-import { Plus, Trash2, ClipboardList, AlertTriangle, CircleDot, Clock, CheckCircle2 } from 'lucide-react'
+import { Plus, Trash2, ClipboardList, AlertTriangle, CircleDot, Clock, CheckCircle2, Search, Filter, User } from 'lucide-react'
 import { taskService, type Task } from '@/services/tasks'
 import { teamService, type TeamMember } from '@/services/team'
 import { pipelineService, type Pipeline } from '@/services/pipeline'
@@ -10,15 +10,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
-import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Combobox } from '@/components/ui/combobox'
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -39,17 +32,28 @@ import {
 } from '@/components/ui/alert-dialog'
 
 const PRIORITIES = [
-  { value: 'low', label: 'Baixa', dot: 'bg-zinc-400' },
-  { value: 'medium', label: 'Media', dot: 'bg-blue-400' },
-  { value: 'high', label: 'Alta', dot: 'bg-amber-400' },
-  { value: 'urgent', label: 'Urgente', dot: 'bg-red-400' },
+  { value: 'low', label: 'Baixa', color: '#22c55e' },
+  { value: 'medium', label: 'Media', color: '#3b82f6' },
+  { value: 'high', label: 'Alta', color: '#eab308' },
+  { value: 'urgent', label: 'Urgente', color: '#ef4444' },
 ]
 
 const STATUSES = [
-  { value: 'todo', label: 'A fazer', icon: CircleDot, color: 'text-zinc-400' },
-  { value: 'in_progress', label: 'Em andamento', icon: Clock, color: 'text-blue-400' },
-  { value: 'done', label: 'Concluida', icon: CheckCircle2, color: 'text-green-400' },
+  { value: 'todo', label: 'A fazer', icon: CircleDot, color: '#a1a1aa' },
+  { value: 'in_progress', label: 'Em andamento', icon: Clock, color: '#3b82f6' },
+  { value: 'done', label: 'Concluida', icon: CheckCircle2, color: '#22c55e' },
 ]
+
+const AVATAR_COLORS = [
+  '#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6',
+  '#8b5cf6', '#ef4444', '#14b8a6', '#f97316', '#06b6d4',
+]
+
+function getAvatarColor(name: string) {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
+}
 
 export default function Tarefas() {
   const [tasks, setTasks] = useState<Task[]>([])
@@ -58,6 +62,11 @@ export default function Tarefas() {
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
+
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filterStatus, setFilterStatus] = useState('all')
+  const [filterPriority, setFilterPriority] = useState('all')
 
   // Form
   const [title, setTitle] = useState('')
@@ -79,9 +88,7 @@ export default function Tarefas() {
         teamService.list(),
         pipelineService.list(),
       ])
-      if (tasksRes.success && tasksRes.data) {
-        setTasks(tasksRes.data)
-      }
+      if (tasksRes.success && tasksRes.data) setTasks(tasksRes.data)
       if (membersRes.success && membersRes.data) setMembers(membersRes.data)
       if (pipelinesRes.success && pipelinesRes.data) setPipelines(pipelinesRes.data)
     } catch {
@@ -90,6 +97,21 @@ export default function Tarefas() {
       setLoading(false)
     }
   }
+
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((t) => {
+      if (searchQuery && !t.title.toLowerCase().includes(searchQuery.toLowerCase())) return false
+      if (filterStatus !== 'all' && t.status !== filterStatus) return false
+      if (filterPriority !== 'all' && t.priority !== filterPriority) return false
+      return true
+    })
+  }, [tasks, searchQuery, filterStatus, filterPriority])
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: tasks.length }
+    for (const t of tasks) counts[t.status] = (counts[t.status] || 0) + 1
+    return counts
+  }, [tasks])
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault()
@@ -160,7 +182,6 @@ export default function Tarefas() {
     setBlockId('')
   }
 
-  // Blocks from selected pipeline only
   const selectedPipeline = pipelines.find((p) => p.id === selectedPipelineId)
   const pipelineBlocks = selectedPipeline
     ? selectedPipeline.phases.flatMap((phase) =>
@@ -172,8 +193,6 @@ export default function Tarefas() {
       )
     : []
 
-  // All blocks (for inline select on task cards)
-  // Build flat list of blocks from all pipelines
   const allBlocks = pipelines.flatMap((p) =>
     p.phases.flatMap((phase) =>
       phase.blocks.map((block) => ({
@@ -195,12 +214,13 @@ export default function Tarefas() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-zinc-50">Tarefas</h1>
-          <p className="text-sm text-zinc-400">
-            {tasks.length} {tasks.length === 1 ? 'tarefa' : 'tarefas'}
+          <p className="text-sm text-zinc-500 mt-0.5">
+            {tasks.length} {tasks.length === 1 ? 'tarefa' : 'tarefas'} no total
           </p>
         </div>
         <Button onClick={() => setShowCreate(true)} size="sm">
@@ -221,85 +241,186 @@ export default function Tarefas() {
           </Button>
         </EmptyState>
       ) : (
-        <div className="space-y-2">
-          {tasks.map((task) => {
-            const pri = PRIORITIES.find((p) => p.value === task.priority) || PRIORITIES[1]
-            const st = STATUSES.find((s) => s.value === task.status) || STATUSES[0]
+        <>
+          {/* Filters */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {/* Status pills */}
+            <div className="flex items-center gap-1.5">
+              {[
+                { value: 'all', label: 'Todas' },
+                ...STATUSES.map((s) => ({ value: s.value, label: s.label })),
+              ].map((f) => {
+                const isActive = filterStatus === f.value
+                const count = statusCounts[f.value] || 0
+                return (
+                  <button
+                    key={f.value}
+                    type="button"
+                    onClick={() => setFilterStatus(f.value)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
+                      isActive
+                        ? 'bg-zinc-100 text-zinc-900'
+                        : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+                    }`}
+                  >
+                    {f.label}
+                    <span className={`text-[10px] tabular-nums ${isActive ? 'text-zinc-600' : 'text-zinc-600'}`}>
+                      {count}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
 
-            return (
-              <Card key={task.id} className="group">
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3 min-w-0">
-                      <Select value={task.status} onValueChange={(v) => handleChangeStatus(task.id, v)}>
-                        <SelectTrigger className="mt-0.5 h-auto w-auto border-0 bg-transparent p-0 shadow-none focus-visible:ring-0">
-                          <st.icon size={16} className={st.color} />
+            {/* Search + Priority filter */}
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600" />
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-8 w-40 rounded-lg bg-zinc-900 pl-7 pr-2 text-xs text-zinc-300 ring-1 ring-zinc-800 focus:ring-zinc-600 focus:outline-none placeholder:text-zinc-600 transition-all"
+                />
+              </div>
+              <Select value={filterPriority} onValueChange={setFilterPriority}>
+                <SelectTrigger className="h-8 w-auto gap-1 border-0 bg-zinc-900 ring-1 ring-zinc-800 text-xs px-2.5">
+                  <Filter size={12} className="text-zinc-500" />
+                  <SelectValue placeholder="Prioridade" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  {PRIORITIES.map((p) => (
+                    <SelectItem key={p.value} value={p.value}>
+                      <span className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />
+                        {p.label}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Task list */}
+          <div className="space-y-2">
+            {filteredTasks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <Search size={20} className="text-zinc-700 mb-2" />
+                <p className="text-sm text-zinc-500">Nenhuma tarefa encontrada</p>
+              </div>
+            ) : (
+              filteredTasks.map((task) => {
+                const pri = PRIORITIES.find((p) => p.value === task.priority) || PRIORITIES[1]
+                const st = STATUSES.find((s) => s.value === task.status) || STATUSES[0]
+                const isDone = task.status === 'done'
+                const assigneeColor = task.assignee ? getAvatarColor(task.assignee.name) : '#71717a'
+
+                return (
+                  <div
+                    key={task.id}
+                    className="group flex items-center gap-3 rounded-xl p-3 ring-1 ring-zinc-800/60 hover:ring-zinc-700 bg-zinc-950 hover:bg-zinc-900/50 transition-all duration-150"
+                  >
+                    {/* Status icon (clickable) */}
+                    <Select value={task.status} onValueChange={(v) => handleChangeStatus(task.id, v)}>
+                      <SelectTrigger className="h-auto w-auto border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 shrink-0">
+                        <div
+                          className="h-7 w-7 rounded-lg flex items-center justify-center transition-colors"
+                          style={{ backgroundColor: st.color + '15' }}
+                        >
+                          <st.icon size={14} style={{ color: st.color }} />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STATUSES.map((s) => (
+                          <SelectItem key={s.value} value={s.value}>
+                            <span className="flex items-center gap-2">
+                              <s.icon size={14} style={{ color: s.color }} />
+                              {s.label}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className={`text-sm font-medium truncate ${isDone ? 'line-through text-zinc-500' : 'text-zinc-100'}`}>
+                          {task.title}
+                        </p>
+                        {task.priority === 'urgent' && (
+                          <AlertTriangle size={12} className="text-red-400 shrink-0" />
+                        )}
+                      </div>
+                      {task.description && (
+                        <p className="text-[11px] text-zinc-600 truncate mt-0.5">{task.description}</p>
+                      )}
+                      <div className="flex items-center gap-3 mt-1.5">
+                        {task.assignee && (
+                          <div className="flex items-center gap-1.5">
+                            <div
+                              className="h-4 w-4 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0"
+                              style={{ backgroundColor: assigneeColor + '20', color: assigneeColor }}
+                            >
+                              {task.assignee.name.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="text-[11px] text-zinc-500">{task.assignee.name}</span>
+                          </div>
+                        )}
+                        {task.block && (
+                          <span className="text-[10px] text-zinc-600 truncate">
+                            {task.block.phase.name} / {task.block.name}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right side */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {/* Priority pill */}
+                      <span
+                        className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+                        style={{ backgroundColor: pri.color + '15', color: pri.color }}
+                      >
+                        {pri.label}
+                      </span>
+
+                      {/* Block selector */}
+                      <Select
+                        value={task.blockId || '_none'}
+                        onValueChange={(v) => handleChangeBlock(task.id, v)}
+                      >
+                        <SelectTrigger className="h-6 w-auto min-w-0 gap-1 border-0 bg-zinc-800/50 hover:bg-zinc-800 px-2 py-0 text-[10px] shadow-none focus-visible:ring-0 rounded-full text-zinc-500 transition-colors">
+                          <SelectValue placeholder="Sem bloco" />
                         </SelectTrigger>
                         <SelectContent>
-                          {STATUSES.map((s) => (
-                            <SelectItem key={s.value} value={s.value}>
-                              <span className="flex items-center gap-2">
-                                <s.icon size={14} className={s.color} />
-                                {s.label}
-                              </span>
+                          <SelectItem value="_none">Sem bloco</SelectItem>
+                          {allBlocks.map((b) => (
+                            <SelectItem key={b.id} value={b.id}>
+                              {b.phaseName} / {b.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      <div className="min-w-0">
-                        <CardTitle className={`text-sm ${task.status === 'done' ? 'line-through text-zinc-500' : ''}`}>{task.title}</CardTitle>
-                        {task.description && (
-                          <p className="mt-0.5 text-xs text-zinc-500 line-clamp-2">{task.description}</p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {task.priority === 'urgent' && <AlertTriangle size={12} className="text-red-400" />}
-                      <Badge variant="outline" className="text-[10px]">
-                        {pri.label}
-                      </Badge>
+
+                      {/* Delete */}
                       <button
                         type="button"
                         onClick={() => setDeleting(task.id)}
-                        className="text-zinc-700 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+                        className="p-1 rounded-lg text-zinc-700 opacity-0 group-hover:opacity-100 hover:text-red-400 hover:bg-red-400/10 transition-all"
                       >
                         <Trash2 size={12} />
                       </button>
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent className="pt-0 pb-3">
-                  <div className="flex items-center gap-3 text-[10px] text-zinc-500">
-                    {task.assignee && (
-                      <div className="flex items-center gap-1">
-                        <div className="flex h-4 w-4 items-center justify-center rounded-full bg-zinc-800 text-[8px] text-zinc-400">
-                          {task.assignee.name.charAt(0).toUpperCase()}
-                        </div>
-                        {task.assignee.name}
-                      </div>
-                    )}
-                    <Select
-                      value={task.blockId || '_none'}
-                      onValueChange={(v) => handleChangeBlock(task.id, v)}
-                    >
-                      <SelectTrigger className="h-5 w-auto min-w-0 gap-1 border-0 bg-transparent px-1 py-0 text-[10px] shadow-none focus-visible:ring-0">
-                        <SelectValue placeholder="Sem bloco" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="_none">Sem bloco</SelectItem>
-                        {allBlocks.map((b) => (
-                          <SelectItem key={b.id} value={b.id}>
-                            {b.phaseName} / {b.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
+                )
+              })
+            )}
+          </div>
+        </>
       )}
 
       {/* Create dialog */}
@@ -344,7 +465,7 @@ export default function Tarefas() {
                       {PRIORITIES.map((p) => (
                         <SelectItem key={p.value} value={p.value}>
                           <span className="flex items-center gap-2">
-                            <span className={`h-2 w-2 rounded-full ${p.dot}`} />
+                            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />
                             {p.label}
                           </span>
                         </SelectItem>

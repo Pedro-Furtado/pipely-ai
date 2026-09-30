@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
   Workflow,
@@ -37,6 +37,7 @@ const memberNavItems = [
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === 'true')
   const { isOwner } = useWorkspace()
+  const location = useLocation()
   const navItems = isOwner ? ownerNavItems : memberNavItems
   const [configStatus, setConfigStatus] = useState<{ whatsapp: boolean; ai: boolean }>({ whatsapp: true, ai: true })
 
@@ -55,7 +56,7 @@ export default function Sidebar() {
       } catch { /* silent */ }
     }
     checkConfigs()
-  }, [isOwner])
+  }, [isOwner, location.pathname])
 
   return (
     <aside

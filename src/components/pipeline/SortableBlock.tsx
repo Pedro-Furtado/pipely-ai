@@ -18,30 +18,17 @@ import {
 import DraggableCard from '@/components/pipeline/DraggableCard'
 import BlockConfigModal from '@/components/pipeline/BlockConfigModal'
 
-const COLOR_BORDER: Record<string, string> = {
-  blue: 'border-t-blue-500',
-  purple: 'border-t-purple-500',
-  amber: 'border-t-amber-500',
-  orange: 'border-t-orange-500',
-  cyan: 'border-t-cyan-500',
-  green: 'border-t-green-500',
-  teal: 'border-t-teal-500',
-  rose: 'border-t-rose-500',
-  indigo: 'border-t-indigo-500',
-  pink: 'border-t-pink-500',
-}
-
-const COLOR_BG: Record<string, string> = {
-  blue: 'bg-blue-500/5',
-  purple: 'bg-purple-500/5',
-  amber: 'bg-amber-500/5',
-  orange: 'bg-orange-500/5',
-  cyan: 'bg-cyan-500/5',
-  green: 'bg-green-500/5',
-  teal: 'bg-teal-500/5',
-  rose: 'bg-rose-500/5',
-  indigo: 'bg-indigo-500/5',
-  pink: 'bg-pink-500/5',
+const COLOR_HEX: Record<string, string> = {
+  blue: '#3b82f6',
+  purple: '#a855f7',
+  amber: '#f59e0b',
+  orange: '#f97316',
+  cyan: '#06b6d4',
+  green: '#22c55e',
+  teal: '#14b8a6',
+  rose: '#f43f5e',
+  indigo: '#6366f1',
+  pink: '#ec4899',
 }
 
 const COLOR_ICON: Record<string, string> = {
@@ -139,114 +126,129 @@ export default function SortableBlock({ block, phaseId, phaseColor, pipeline, on
       ref={setSortableRef}
       style={style}
       className={cn(
-        'flex-none w-48 sm:w-52 flex flex-col',
+        'flex-none w-56 sm:w-64 flex flex-col',
         isSortDragging && 'opacity-40'
       )}
     >
-      {/* Block header */}
-      <div
-        className={cn(
-          'rounded-t-lg border-t-2 border border-zinc-800 px-2 py-1.5',
-          COLOR_BORDER[phaseColor] || 'border-t-zinc-500',
-          COLOR_BG[phaseColor] || 'bg-zinc-900'
-        )}
-      >
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            className={cn("cursor-grab hover:text-zinc-400 touch-none", COLOR_ICON[phaseColor] || "text-zinc-600")}
-            {...attributes}
-            {...listeners}
-          >
-            <GripHorizontal size={12} />
-          </button>
+      {/* Block container */}
+      {(() => {
+        const hex = COLOR_HEX[phaseColor] || '#71717a'
+        return (
+          <div className="rounded-xl ring-1 ring-zinc-800 hover:ring-zinc-700 transition-all duration-200">
+            {/* Header with radial glow */}
+            <div className="relative px-3 py-2.5 rounded-t-xl" style={{ background: `linear-gradient(135deg, ${hex}10 0%, transparent 60%)` }}>
+              {/* Top glow spot */}
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{ background: `radial-gradient(ellipse 70% 30px at 50% 0%, ${hex}15 0%, transparent 70%)` }}
+              />
+              <div className="relative flex items-center gap-1.5">
+                <button
+                  type="button"
+                  className={cn("cursor-grab hover:text-zinc-400 touch-none", COLOR_ICON[phaseColor] || "text-zinc-600")}
+                  {...attributes}
+                  {...listeners}
+                >
+                  <GripHorizontal size={14} />
+                </button>
 
-          {editing ? (
-            <Input
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              onBlur={handleRename}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleRename()
-                if (e.key === 'Escape') setEditing(false)
-              }}
-              autoFocus
-              className="h-5 flex-1 text-[11px]"
-            />
-          ) : (
-            <>
-              <span className="flex-1 truncate text-[11px] font-medium text-zinc-300">
-                {block.name}
-              </span>
-              {block.blockType === 'message' && (
-                <Badge variant="secondary" className="h-3.5 px-1 text-[8px]">
-                  <Zap size={7} className="mr-0.5" />
-                  auto
-                </Badge>
+                {editing ? (
+                  <Input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    onBlur={handleRename}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleRename()
+                      if (e.key === 'Escape') setEditing(false)
+                    }}
+                    autoFocus
+                    className="h-6 flex-1 text-xs"
+                  />
+                ) : (
+                  <>
+                    <span className="flex-1 truncate text-xs font-semibold text-zinc-200">
+                      {block.name}
+                    </span>
+                    {block.blockType === 'message' && (
+                      <span
+                        className="inline-flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded-full"
+                        style={{ backgroundColor: hex + '18', color: hex }}
+                      >
+                        <Zap size={8} />
+                        auto
+                      </span>
+                    )}
+                  </>
+                )}
+
+                <span
+                  className="text-[11px] font-medium tabular-nums px-1.5 py-0.5 rounded-full"
+                  style={{ backgroundColor: hex + '12', color: hex }}
+                >
+                  {tasks.length}
+                </span>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger className="rounded-lg p-1 text-zinc-600 hover:bg-zinc-800/80 hover:text-zinc-400 transition-colors">
+                    <MoreHorizontal size={13} />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onClick={onAddTask}>
+                      <Plus size={14} />
+                      Adicionar tarefa
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { setShowConfig(true); onModalOpen?.() }}>
+                      <Settings size={14} />
+                      Configurar
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setEditing(true)}>
+                      <Pencil size={14} />
+                      Renomear
+                    </DropdownMenuItem>
+                    {!block.isLocked && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem destructive onClick={handleDelete}>
+                          <Trash2 size={14} />
+                          Remover bloco
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+
+            {/* Cards droppable zone */}
+            <div
+              ref={setDropRef}
+              className={cn(
+                'flex-1 flex flex-col gap-2 p-2 min-h-[120px] max-h-[calc(100vh-240px)] overflow-y-auto transition-colors',
+                isCardOver ? 'bg-blue-500/5' : 'bg-zinc-900/20'
               )}
-            </>
-          )}
+            >
+              {tasks.map((task) => (
+                <DraggableCard
+                  key={task.id}
+                  task={task}
+                  onRemove={() => handleRemoveTask(task.id)}
+                />
+              ))}
 
-          <span className={cn("text-[10px]", COLOR_ICON[phaseColor] || "text-zinc-600")}>{tasks.length}</span>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger className="rounded p-0.5 text-zinc-600 hover:bg-zinc-800 hover:text-zinc-400">
-              <MoreHorizontal size={11} />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={onAddTask}>
-                <Plus size={14} />
-                Adicionar tarefa
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => { setShowConfig(true); onModalOpen?.() }}>
-                <Settings size={14} />
-                Configurar
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setEditing(true)}>
-                <Pencil size={14} />
-                Renomear
-              </DropdownMenuItem>
-              {!block.isLocked && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem destructive onClick={handleDelete}>
-                    <Trash2 size={14} />
-                    Remover bloco
-                  </DropdownMenuItem>
-                </>
+              {tasks.length === 0 && (
+                <button
+                  type="button"
+                  onClick={onAddTask}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-zinc-800/60 py-6 text-[11px] text-zinc-600 transition-colors hover:border-zinc-600 hover:text-zinc-400"
+                >
+                  <Plus size={12} />
+                  Tarefa
+                </button>
               )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-
-      {/* Cards droppable zone */}
-      <div
-        ref={setDropRef}
-        className={cn(
-          'flex-1 flex flex-col gap-1.5 rounded-b-lg border border-t-0 border-zinc-800 p-1.5 min-h-[100px] max-h-[calc(100vh-240px)] overflow-y-auto transition-colors',
-          isCardOver ? 'bg-blue-500/5' : 'bg-zinc-900/30'
-        )}
-      >
-        {tasks.map((task) => (
-          <DraggableCard
-            key={task.id}
-            task={task}
-            onRemove={() => handleRemoveTask(task.id)}
-          />
-        ))}
-
-        {tasks.length === 0 && (
-          <button
-            type="button"
-            onClick={onAddTask}
-            className="flex flex-1 items-center justify-center gap-1 rounded-md border border-dashed border-zinc-800 py-4 text-[10px] text-zinc-600 transition-colors hover:border-zinc-600 hover:text-zinc-400"
-          >
-            <Plus size={10} />
-            Tarefa
-          </button>
-        )}
-      </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {showConfig && (
         <BlockConfigModal

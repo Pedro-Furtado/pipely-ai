@@ -85,4 +85,9 @@ export const whatsappService = {
     const res = await api.get('/api/whatsapp/license')
     return res.data
   },
+
+  async getInstanceStats(instanceId: string): Promise<ApiResponse & { data?: { profileName: string | null; ownerJid: string | null; avatar: string | null } }> {
+    const res = await api.get(`/api/whatsapp/instances/${instanceId}/stats`)
+    return res.data
+  },
 }

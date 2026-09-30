@@ -1,21 +1,13 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { toast } from 'sonner'
-import { Key, Eye, EyeOff, CheckCircle2, Trash2, RefreshCw, ChevronLeft, ChevronRight, Send, ArrowRightLeft, MessageSquare, Clock, AlertTriangle, Bot } from 'lucide-react'
+import { Key, Eye, EyeOff, CheckCircle2, Trash2, RefreshCw, ChevronLeft, ChevronRight, Send, ArrowRightLeft, MessageSquare, Clock, AlertTriangle, Bot, Activity, Shield } from 'lucide-react'
 import { aiService, type AiConfig } from '@/services/ai'
 import { agentLogService, type AgentLog } from '@/services/agent-logs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
-import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,39 +19,51 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 
-const LOG_TYPE_CONFIG: Record<string, { label: string; color: string; icon: typeof Send }> = {
-  processing: { label: 'Processando', color: 'text-blue-400 bg-blue-500/10', icon: Bot },
-  message_sent: { label: 'Mensagem', color: 'text-green-400 bg-green-500/10', icon: Send },
-  message_error: { label: 'Erro envio', color: 'text-red-400 bg-red-500/10', icon: AlertTriangle },
-  task_moved: { label: 'Movida', color: 'text-purple-400 bg-purple-500/10', icon: ArrowRightLeft },
-  move_error: { label: 'Erro mover', color: 'text-red-400 bg-red-500/10', icon: AlertTriangle },
-  task_retry: { label: 'Retry', color: 'text-amber-400 bg-amber-500/10', icon: Clock },
-  retry_error: { label: 'Erro retry', color: 'text-red-400 bg-red-500/10', icon: AlertTriangle },
-  task_processed: { label: 'Processada', color: 'text-green-400 bg-green-500/10', icon: CheckCircle2 },
-  agent_response: { label: 'Resumo', color: 'text-cyan-400 bg-cyan-500/10', icon: Bot },
-  reply_received: { label: 'Resposta', color: 'text-blue-400 bg-blue-500/10', icon: MessageSquare },
-  reply_processed: { label: 'Resp. processada', color: 'text-green-400 bg-green-500/10', icon: CheckCircle2 },
-  auto_advance: { label: 'Auto-avanco', color: 'text-purple-400 bg-purple-500/10', icon: ArrowRightLeft },
-  no_reply: { label: 'Sem resposta', color: 'text-amber-400 bg-amber-500/10', icon: Clock },
-  status_changed: { label: 'Status', color: 'text-cyan-400 bg-cyan-500/10', icon: RefreshCw },
-  notification_sent: { label: 'Notificacao', color: 'text-green-400 bg-green-500/10', icon: Send },
-  notification_error: { label: 'Erro notif.', color: 'text-red-400 bg-red-500/10', icon: AlertTriangle },
-  buttons_sent: { label: 'Botoes', color: 'text-green-400 bg-green-500/10', icon: Send },
-  buttons_error: { label: 'Erro botoes', color: 'text-red-400 bg-red-500/10', icon: AlertTriangle },
-  poll_sent: { label: 'Enquete', color: 'text-green-400 bg-green-500/10', icon: Send },
-  poll_error: { label: 'Erro enquete', color: 'text-red-400 bg-red-500/10', icon: AlertTriangle },
-  list_sent: { label: 'Lista', color: 'text-green-400 bg-green-500/10', icon: Send },
-  list_error: { label: 'Erro lista', color: 'text-red-400 bg-red-500/10', icon: AlertTriangle },
-  error: { label: 'Erro', color: 'text-red-400 bg-red-500/10', icon: AlertTriangle },
+const LOG_TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; icon: typeof Send }> = {
+  processing: { label: 'Processando', color: '#3b82f6', bg: '#3b82f620', icon: Bot },
+  message_sent: { label: 'Mensagem', color: '#22c55e', bg: '#22c55e20', icon: Send },
+  message_error: { label: 'Erro envio', color: '#ef4444', bg: '#ef444420', icon: AlertTriangle },
+  task_moved: { label: 'Movida', color: '#a855f7', bg: '#a855f720', icon: ArrowRightLeft },
+  move_error: { label: 'Erro mover', color: '#ef4444', bg: '#ef444420', icon: AlertTriangle },
+  task_retry: { label: 'Retry', color: '#f59e0b', bg: '#f59e0b20', icon: Clock },
+  retry_error: { label: 'Erro retry', color: '#ef4444', bg: '#ef444420', icon: AlertTriangle },
+  task_processed: { label: 'Processada', color: '#22c55e', bg: '#22c55e20', icon: CheckCircle2 },
+  agent_response: { label: 'Resumo', color: '#06b6d4', bg: '#06b6d420', icon: Bot },
+  reply_received: { label: 'Resposta', color: '#3b82f6', bg: '#3b82f620', icon: MessageSquare },
+  reply_processed: { label: 'Resp. processada', color: '#22c55e', bg: '#22c55e20', icon: CheckCircle2 },
+  auto_advance: { label: 'Auto-avanco', color: '#a855f7', bg: '#a855f720', icon: ArrowRightLeft },
+  no_reply: { label: 'Sem resposta', color: '#f59e0b', bg: '#f59e0b20', icon: Clock },
+  status_changed: { label: 'Status', color: '#06b6d4', bg: '#06b6d420', icon: RefreshCw },
+  notification_sent: { label: 'Notificacao', color: '#22c55e', bg: '#22c55e20', icon: Send },
+  notification_error: { label: 'Erro notif.', color: '#ef4444', bg: '#ef444420', icon: AlertTriangle },
+  buttons_sent: { label: 'Botoes', color: '#22c55e', bg: '#22c55e20', icon: Send },
+  buttons_error: { label: 'Erro botoes', color: '#ef4444', bg: '#ef444420', icon: AlertTriangle },
+  poll_sent: { label: 'Enquete', color: '#22c55e', bg: '#22c55e20', icon: Send },
+  poll_error: { label: 'Erro enquete', color: '#ef4444', bg: '#ef444420', icon: AlertTriangle },
+  list_sent: { label: 'Lista', color: '#22c55e', bg: '#22c55e20', icon: Send },
+  list_error: { label: 'Erro lista', color: '#ef4444', bg: '#ef444420', icon: AlertTriangle },
+  error: { label: 'Erro', color: '#ef4444', bg: '#ef444420', icon: AlertTriangle },
 }
 
 function getLogConfig(type: string) {
-  return LOG_TYPE_CONFIG[type] || { label: type, color: 'text-zinc-400 bg-zinc-500/10', icon: Bot }
+  return LOG_TYPE_CONFIG[type] || { label: type, color: '#a1a1aa', bg: '#a1a1aa20', icon: Bot }
+}
+
+function timeAgo(dateStr: string) {
+  const now = Date.now()
+  const diff = now - new Date(dateStr).getTime()
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return 'agora'
+  if (minutes < 60) return `${minutes}min`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  return `${days}d`
 }
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr)
-  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
 export default function Assistente() {
@@ -184,121 +188,148 @@ export default function Assistente() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-zinc-50">Assistente de IA</h1>
-        <p className="text-sm text-zinc-400">
-          Configure seu assistente e acompanhe a atividade do agente.
-        </p>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-zinc-50">Assistente de IA</h1>
+          <p className="text-sm text-zinc-500 mt-0.5">
+            Configure e acompanhe a atividade do agente.
+          </p>
+        </div>
+        {config && (
+          <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Agente ativo
+          </div>
+        )}
       </div>
 
       {/* API Key Card */}
-      <Card className="max-w-lg">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Key size={16} />
-            OpenAI API Key
-          </CardTitle>
-          <CardDescription>
-            Sua chave de API da OpenAI para o assistente funcionar.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {config && !editing ? (
-            <div className="space-y-4">
+      <div className="max-w-lg">
+        <div className="rounded-xl ring-1 ring-zinc-800 overflow-hidden">
+          {/* Card header with gradient */}
+          <div className="relative px-5 pt-5 pb-4" style={{ background: 'linear-gradient(135deg, #6366f115 0%, transparent 60%)' }}>
+            <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2">
-                  <span className="text-sm text-zinc-300 font-mono">{config.keyPreview}</span>
+                <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-indigo-500/15">
+                  <Key size={18} className="text-indigo-400" />
                 </div>
-                <Badge className="bg-green-500/20 text-green-400">
-                  <CheckCircle2 size={10} className="mr-1" />
+                <div>
+                  <h3 className="text-sm font-semibold text-zinc-100">OpenAI API Key</h3>
+                  <p className="text-[11px] text-zinc-500 mt-0.5">Chave para o agente funcionar</p>
+                </div>
+              </div>
+              {config && !editing && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400">
+                  <Shield size={10} />
                   Configurada
-                </Badge>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setEditing(true)} className="flex-1">
-                  Alterar chave
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setShowRemove(true)} className="text-red-400 hover:text-red-300">
-                  <Trash2 size={14} />
-                </Button>
-              </div>
+                </span>
+              )}
             </div>
-          ) : (
-            <form onSubmit={handleSave} className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="openai-key" className="text-xs">API Key</Label>
-                <div className="relative">
-                  <Input
-                    id="openai-key"
-                    type={showKey ? 'text' : 'password'}
-                    placeholder="sk-..."
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    disabled={saving}
-                    autoFocus
-                    className="pr-10 font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowKey(!showKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-50 transition-colors"
-                    tabIndex={-1}
-                  >
-                    {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+          </div>
+
+          {/* Card body */}
+          <div className="px-5 pb-5">
+            {config && !editing ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 rounded-lg bg-zinc-900/50 ring-1 ring-zinc-800 px-3 py-2.5">
+                  <span className="text-sm text-zinc-400 font-mono flex-1">{config.keyPreview}</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setEditing(true)} className="flex-1 text-xs h-8">
+                    Alterar chave
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setShowRemove(true)} className="text-red-400 hover:text-red-300 h-8">
+                    <Trash2 size={13} />
+                  </Button>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Button type="submit" size="sm" disabled={saving || !apiKey.trim()} className="flex-1">
-                  {saving ? <Spinner size="sm" /> : 'Salvar'}
-                </Button>
-                {editing && (
-                  <Button type="button" variant="outline" size="sm" onClick={() => { setEditing(false); setApiKey('') }}>
-                    Cancelar
+            ) : (
+              <form onSubmit={handleSave} className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="openai-key" className="text-xs">API Key</Label>
+                  <div className="relative">
+                    <Input
+                      id="openai-key"
+                      type={showKey ? 'text' : 'password'}
+                      placeholder="sk-..."
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      disabled={saving}
+                      autoFocus
+                      className="pr-10 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowKey(!showKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+                      tabIndex={-1}
+                    >
+                      {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button type="submit" size="sm" disabled={saving || !apiKey.trim()} className="flex-1 h-8 text-xs">
+                    {saving ? <Spinner size="sm" /> : 'Salvar'}
                   </Button>
-                )}
-              </div>
-            </form>
-          )}
-        </CardContent>
-      </Card>
+                  {editing && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => { setEditing(false); setApiKey('') }} className="h-8 text-xs">
+                      Cancelar
+                    </Button>
+                  )}
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      </div>
 
-      {/* Agent Logs */}
-      <div className="space-y-3">
+      {/* Agent Activity */}
+      <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-zinc-50">Atividade do agente</h2>
+          <div className="flex items-center gap-2">
+            <Activity size={18} className="text-zinc-400" />
+            <h2 className="text-lg font-semibold text-zinc-50">Atividade do agente</h2>
+            {totalLogs > 0 && (
+              <span className="text-[11px] text-zinc-600 tabular-nums">{totalLogs}</span>
+            )}
+          </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => { setPage(1); loadLogs() }} disabled={logsLoading}>
-              {logsLoading ? <Spinner size="sm" className="h-3 w-3" /> : <RefreshCw size={14} />}
+            <Button variant="outline" size="sm" onClick={() => { setPage(1); loadLogs() }} disabled={logsLoading} className="h-7 w-7 p-0">
+              {logsLoading ? <Spinner size="sm" className="h-3 w-3" /> : <RefreshCw size={13} />}
             </Button>
             {totalLogs > 0 && (
-              <Button variant="outline" size="sm" onClick={() => setShowClearLogs(true)} className="text-zinc-400">
-                <Trash2 size={14} />
+              <Button variant="outline" size="sm" onClick={() => setShowClearLogs(true)} className="h-7 text-xs text-zinc-500">
+                <Trash2 size={12} />
                 Limpar
               </Button>
             )}
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="flex gap-1.5 flex-wrap">
-          {filterTypes.map(f => (
-            <button
-              key={f.value}
-              type="button"
-              onClick={() => { setFilterType(f.value); setPage(1) }}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                filterType === f.value
-                  ? 'bg-zinc-700 text-zinc-50'
-                  : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+        {/* Filter pills */}
+        <div className="flex items-center gap-1.5">
+          {filterTypes.map(f => {
+            const isActive = filterType === f.value
+            return (
+              <button
+                key={f.value}
+                type="button"
+                onClick={() => { setFilterType(f.value); setPage(1) }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  isActive
+                    ? 'bg-zinc-100 text-zinc-900'
+                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+                }`}
+              >
+                {f.label}
+              </button>
+            )
+          })}
         </div>
 
-        {/* Table */}
+        {/* Log entries */}
         {logs.length === 0 ? (
           <EmptyState
             icon={Bot}
@@ -307,66 +338,83 @@ export default function Assistente() {
           />
         ) : (
           <>
-            <div className="overflow-hidden rounded-lg border border-zinc-800">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-zinc-800 bg-zinc-900/50">
-                    <th className="px-3 py-2 text-left text-[11px] font-medium text-zinc-400">Data</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-medium text-zinc-400">Tipo</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-medium text-zinc-400">Evento</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-medium text-zinc-400">Detalhe</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {logs.map(log => {
-                    const cfg = getLogConfig(log.type)
-                    const Icon = cfg.icon
-                    const isExpanded = expandedLog === log.id
-                    const hasDetail = !!log.detail
+            <div className="space-y-1.5">
+              {logs.map(log => {
+                const cfg = getLogConfig(log.type)
+                const Icon = cfg.icon
+                const isExpanded = expandedLog === log.id
+                const hasDetail = !!log.detail
 
-                    return (
-                      <tr
-                        key={log.id}
-                        onClick={() => hasDetail && setExpandedLog(isExpanded ? null : log.id)}
-                        className={`border-b border-zinc-800/50 transition-colors ${hasDetail ? 'cursor-pointer hover:bg-zinc-800/30' : ''}`}
+                return (
+                  <div
+                    key={log.id}
+                    onClick={() => hasDetail && setExpandedLog(isExpanded ? null : log.id)}
+                    className={`group rounded-xl p-3 ring-1 ring-zinc-800/60 hover:ring-zinc-700 bg-zinc-950 transition-all duration-150 ${hasDetail ? 'cursor-pointer' : ''}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      {/* Icon */}
+                      <div
+                        className="h-7 w-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
+                        style={{ backgroundColor: cfg.bg }}
                       >
-                        <td className="px-3 py-2 text-[11px] text-zinc-500 whitespace-nowrap font-mono">
-                          {formatDate(log.createdAt)}
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${cfg.color}`}>
-                            <Icon size={10} />
+                        <Icon size={13} style={{ color: cfg.color }} />
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                            style={{ backgroundColor: cfg.bg, color: cfg.color }}
+                          >
                             {cfg.label}
                           </span>
-                        </td>
-                        <td className="px-3 py-2 text-xs text-zinc-200 max-w-[300px] truncate">
-                          {log.title}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-zinc-400 max-w-[400px]">
-                          {isExpanded ? (
-                            <span className="whitespace-pre-wrap break-words">{log.detail}</span>
-                          ) : (
-                            <span className="truncate block">{log.detail || '—'}</span>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                          <span className="text-[10px] text-zinc-600 font-mono" title={formatDate(log.createdAt)}>
+                            {timeAgo(log.createdAt)}
+                          </span>
+                        </div>
+                        <p className="text-sm text-zinc-200 mt-1 leading-snug">{log.title}</p>
+                        {isExpanded && log.detail && (
+                          <p className="text-xs text-zinc-500 mt-1.5 whitespace-pre-wrap break-words leading-relaxed bg-zinc-900/50 rounded-lg px-3 py-2 ring-1 ring-zinc-800/50">
+                            {log.detail}
+                          </p>
+                        )}
+                        {!isExpanded && log.detail && (
+                          <p className="text-[11px] text-zinc-600 mt-0.5 truncate">{log.detail}</p>
+                        )}
+                      </div>
+
+                      {/* Time (right) */}
+                      <span className="text-[10px] text-zinc-700 font-mono shrink-0 hidden sm:block">
+                        {formatDate(log.createdAt)}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
 
             {/* Pagination */}
-            <div className="flex items-center justify-between text-xs text-zinc-400">
+            <div className="flex items-center justify-between text-xs text-zinc-500 pt-1">
               <span>{totalLogs} log{totalLogs !== 1 ? 's' : ''}</span>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}>
+                <button
+                  type="button"
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="h-7 w-7 rounded-lg ring-1 ring-zinc-800 flex items-center justify-center hover:bg-zinc-800 disabled:opacity-30 transition-colors"
+                >
                   <ChevronLeft size={14} />
-                </Button>
-                <span>{page} / {totalPages}</span>
-                <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
+                </button>
+                <span className="tabular-nums">{page} / {totalPages}</span>
+                <button
+                  type="button"
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="h-7 w-7 rounded-lg ring-1 ring-zinc-800 flex items-center justify-center hover:bg-zinc-800 disabled:opacity-30 transition-colors"
+                >
                   <ChevronRight size={14} />
-                </Button>
+                </button>
               </div>
             </div>
           </>

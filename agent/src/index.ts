@@ -90,7 +90,30 @@ async function handleWebhook(body: Record<string, unknown>): Promise<void> {
   await resolveAndProcess(remoteJid, text, instanceName);
 }
 
+async function isTeamMember(remoteJid: string): Promise<boolean> {
+  const digits = remoteJid.replace("@s.whatsapp.net", "");
+  const jidVariants = [remoteJid];
+
+  // BR numbers: try with/without 9 after DDD
+  if (digits.startsWith("55") && digits.length === 12) {
+    jidVariants.push(`${digits.slice(0, 4)}9${digits.slice(4)}@s.whatsapp.net`);
+  } else if (digits.startsWith("55") && digits.length === 13) {
+    jidVariants.push(`${digits.slice(0, 4)}${digits.slice(5)}@s.whatsapp.net`);
+  }
+
+  const count = await prisma.teamMember.count({
+    where: { remoteJid: { in: jidVariants }, status: "accepted" },
+  });
+  return count > 0;
+}
+
 async function resolveAndProcess(remoteJid: string, text: string, instanceName: string): Promise<void> {
+  // Early filter: only process messages from team members
+  if (!(await isTeamMember(remoteJid))) {
+    log.info(TAG, `Ignored: ${remoteJid.substring(0, 8)}... not a team member`);
+    return;
+  }
+
   log.info(TAG, `Message from ${remoteJid.substring(0, 8)}...: "${text.substring(0, 80)}"`);
 
   const configs = await prisma.whatsAppConfig.findMany();

@@ -232,13 +232,16 @@ router.post("/instances", async (req: Request, res: Response) => {
     const createBody: Record<string, unknown> = {
       name: name.trim(),
       token: instanceToken,
+      advancedSettings: {
+        ignoreGroups: true,
+        ignoreStatus: true,
+        readMessages: false,
+        alwaysOnline: false,
+        rejectCall: false,
+        msgRejectCall: "",
+        ...(resolvedWebhook ? { webhookUrl: resolvedWebhook } : {}),
+      },
     };
-
-    if (resolvedWebhook) {
-      createBody.advancedSettings = {
-        webhookUrl: resolvedWebhook,
-      };
-    }
 
     const result = await evolutionFetch(req.userId, "/instance/create", "POST", createBody);
 
@@ -313,11 +316,16 @@ router.get("/instances/:instanceId/status", async (req: Request, res: Response) 
     const data = result.data as Record<string, unknown>;
     const nested = (data?.data as Record<string, unknown>) || data;
 
-    const connected = nested?.Connected ?? nested?.connected;
-    const state = connected === true ? "open" : connected === false ? "close" : "unknown";
-    const name = nested?.Name || nested?.name || instance?.name || "";
+    const loggedIn = nested?.LoggedIn ?? nested?.loggedIn ?? false;
+    const connected = nested?.Connected ?? nested?.connected ?? false;
+    // LoggedIn = QR was scanned and WhatsApp is authenticated
+    // Connected = socket is open (can be true even without QR scan)
+    const state = loggedIn ? "open" : connected ? "connecting" : "close";
+    const name = nested?.Name || nested?.name || "";
 
-    res.json({ success: true, data: { state, name, connected: !!connected } });
+    logger.info("WHATSAPP", "Instance status", { instanceId: req.params.instanceId, loggedIn, connected, state });
+
+    res.json({ success: true, data: { state, name, connected: !!loggedIn } });
   } catch (error) {
     if (error instanceof Error && error.message === "NO_CONFIG") {
       res.json({ success: true, data: { state: "not_configured" } });
@@ -325,6 +333,58 @@ router.get("/instances/:instanceId/status", async (req: Request, res: Response) 
     }
     logger.error("WHATSAPP", "Get status failed", error);
     res.status(500).json({ success: false, message: "Erro ao verificar status" });
+  }
+});
+
+// GET /api/whatsapp/instances/:instanceId/stats — avatar, profile name, jid
+router.get("/instances/:instanceId/stats", async (req: Request, res: Response) => {
+  try {
+    const verified = await getVerifiedInstance(req.userId, req.params.instanceId);
+    if (!verified) {
+      res.status(404).json({ success: false, message: "Instancia nao encontrada" });
+      return;
+    }
+
+    let profileName: string | null = null;
+    let ownerJid: string | null = null;
+    let avatar: string | null = null;
+
+    // 1. Get status + profile name
+    try {
+      const statusResult = await evolutionFetch(req.userId, "/instance/status", "GET", undefined, verified.token);
+      const statusData = statusResult.data as Record<string, unknown>;
+      const nested = (statusData?.data as Record<string, unknown>) || statusData;
+      profileName = (nested?.Name || nested?.name || null) as string | null;
+    } catch { /* non-fatal */ }
+
+    // 2. Get ownerJid from /instance/all
+    try {
+      const allResult = await evolutionFetch(req.userId, "/instance/all");
+      const allData = allResult.data as Record<string, unknown>;
+      const arr = (allData?.data as Array<Record<string, unknown>>) || [];
+      const found = arr.find((i) => i.id === req.params.instanceId);
+      ownerJid = (found?.jid || found?.Jid || found?.ownerJid || null) as string | null;
+    } catch { /* non-fatal */ }
+
+    // 3. Fetch avatar via /user/avatar
+    if (ownerJid) {
+      try {
+        const cleanJid = ownerJid.replace(/:\d+@/, "@");
+        const avatarResult = await evolutionFetch(req.userId, "/user/avatar", "POST", { number: cleanJid }, verified.token);
+        const avatarData = avatarResult.data as Record<string, unknown>;
+        const nested = (avatarData?.data as Record<string, unknown>) || avatarData;
+        avatar = (nested?.url || nested?.picture || nested?.profilePictureUrl || null) as string | null;
+      } catch { /* non-fatal */ }
+    }
+
+    res.json({ success: true, data: { profileName, ownerJid, avatar } });
+  } catch (error) {
+    if (error instanceof Error && error.message === "NO_CONFIG") {
+      res.json({ success: true, data: { profileName: null, ownerJid: null, avatar: null } });
+      return;
+    }
+    logger.error("WHATSAPP", "Get stats failed", error);
+    res.status(500).json({ success: false, message: "Erro ao buscar stats" });
   }
 });
 

@@ -2,17 +2,36 @@ services:
   db:
     image: postgres:17-alpine
     restart: unless-stopped
+    ports:
+      - "${DB_PORT:-5433}:5432"
     environment:
       POSTGRES_USER: ${DB_USER:-pipely}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-pipely123}
       POSTGRES_DB: ${DB_NAME:-pipely_ai}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-pipely}"]
       interval: 5s
       timeout: 3s
       retries: 5
+
+  evolution:
+    image: evoapicloud/evolution-go:latest
+    restart: unless-stopped
+    ports:
+      - "${EVOLUTION_PORT:-8080}:8080"
+    environment:
+      - GLOBAL_API_KEY=${EVOLUTION_API_KEY:-pipely-dev-key}
+      - CLIENT_NAME=pipely
+      - SERVER_PORT=8080
+      - DATABASE_SAVE_MESSAGES=true
+      - POSTGRES_AUTH_DB=postgresql://${DB_USER:-pipely}:${DB_PASSWORD:-pipely123}@db:5432/evolution_go?sslmode=disable
+      - POSTGRES_USERS_DB=postgresql://${DB_USER:-pipely}:${DB_PASSWORD:-pipely123}@db:5432/evolution_go?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
 
   app:
     build: .
@@ -25,10 +44,15 @@ services:
       - FRONTEND_URL=${APP_URL:-http://localhost}
       - BACKEND_URL=http://127.0.0.1:3333
       - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - EVOLUTION_SERVER_URL=http://evolution:8080
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:-pipely-dev-key}
+      - EVOLUTION_PORT=${EVOLUTION_PORT:-8080}
       - NODE_ENV=production
     depends_on:
       db:
         condition: service_healthy
+      evolution:
+        condition: service_started
 
 volumes:
   pgdata:

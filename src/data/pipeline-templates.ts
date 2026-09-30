@@ -79,7 +79,7 @@ export const pipelineTemplates: PipelineTemplate[] = [
             name: 'Tarefa Finalizada',
             slug: 'tarefa_finalizada',
             blockType: 'message',
-            config: { auto_status: 'done' },
+            config: { auto_status: 'done', notify_on_entry: true },
             position: 1,
             isLocked: false,
           },
@@ -193,6 +193,7 @@ export const pipelineTemplates: PipelineTemplate[] = [
             config: {
               prompt: 'Parabens! Avise que o projeto foi aprovado e agradeca pelo trabalho',
               auto_status: 'done',
+              notify_on_entry: true,
             },
             position: 0,
             isLocked: false,
@@ -275,6 +276,7 @@ export const pipelineTemplates: PipelineTemplate[] = [
             config: {
               prompt: 'Avise que a demanda foi marcada como concluida e agradeca',
               auto_status: 'done',
+              notify_on_entry: true,
             },
             position: 0,
             isLocked: false,
@@ -376,6 +378,7 @@ export const pipelineTemplates: PipelineTemplate[] = [
             config: {
               prompt: 'Avise que o conteudo foi aprovado e agradeca pelo trabalho',
               auto_status: 'done',
+              notify_on_entry: true,
             },
             position: 0,
             isLocked: false,

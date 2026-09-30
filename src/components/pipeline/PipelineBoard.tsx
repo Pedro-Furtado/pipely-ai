@@ -236,7 +236,7 @@ export default function PipelineBoard({ pipeline, setPipeline, onUpdate, onModal
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex-1 min-h-0 overflow-x-auto pb-4 w-full">
+      <div className="flex-1 min-h-0 overflow-x-auto overflow-y-visible pb-4 w-full">
         <SortableContext items={phaseIds} strategy={horizontalListSortingStrategy}>
           <div className="flex gap-8 min-w-max items-start">
             {pipeline.phases.map((phase) => (
