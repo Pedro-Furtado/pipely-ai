@@ -98,6 +98,7 @@ export default function BlockConfigModal({ block, pipeline, open, onClose, onSav
   const [noReplyTime, setNoReplyTime] = useState('00:00')
   const [noReplyBlockId, setNoReplyBlockId] = useState('')
   const [notifyOnEntry, setNotifyOnEntry] = useState(false)
+  const [showPriority, setShowPriority] = useState(true)
   const [autoStatus, setAutoStatus] = useState('')
   const [branches, setBranches] = useState<Branch[]>([])
   const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([])
@@ -138,6 +139,7 @@ export default function BlockConfigModal({ block, pipeline, open, onClose, onSav
     setNoReplyTime(noReply.time)
     setNoReplyBlockId((c.no_reply_block_id as string) || '')
     setNotifyOnEntry(!!(c.notify_on_entry))
+    setShowPriority(c.show_priority !== false)
     setAutoStatus((c.auto_status as string) || '')
     setBranches((c.branches as Branch[]) || [])
     const sched = c.schedule as { entries?: ScheduleEntry[] } | undefined
@@ -184,6 +186,7 @@ export default function BlockConfigModal({ block, pipeline, open, onClose, onSav
         if (validBranches.length > 0) config.branches = validBranches
         if (autoStatus) config.auto_status = autoStatus
         if (notifyOnEntry) config.notify_on_entry = true
+        if (!showPriority) config.show_priority = false
         const validSchedule = scheduleEntries.filter((e) => e.time && (e.day || e.date))
         if (validSchedule.length > 0) {
           config.schedule = { entries: validSchedule }
@@ -346,6 +349,19 @@ export default function BlockConfigModal({ block, pipeline, open, onClose, onSav
                       Notificar quando uma tarefa entrar neste bloco
                     </label>
                     <p className="text-[10px] text-zinc-500 mt-0.5">Voce recebe uma notificacao na plataforma para acompanhar o fluxo.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2 mt-3">
+                  <Checkbox
+                    id="show-priority"
+                    checked={showPriority}
+                    onCheckedChange={(checked) => setShowPriority(checked === true)}
+                  />
+                  <div>
+                    <label htmlFor="show-priority" className="text-xs text-zinc-300 cursor-pointer">
+                      Mencionar prioridade na mensagem
+                    </label>
+                    <p className="text-[10px] text-zinc-500 mt-0.5">O agente inclui o nivel de prioridade (baixa, media, alta, urgente) ao falar com o responsavel.</p>
                   </div>
                 </div>
               </Section>

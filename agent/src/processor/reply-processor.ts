@@ -177,6 +177,7 @@ export async function processReply(event: ReplyEvent): Promise<void> {
         blockPrompt: (config.prompt as string) || (config.message as string) || "",
         delayMinutes: config.delay_minutes as number || 0,
         nextBlockId: config.next_block_id as string || "",
+        showPriority: config.show_priority !== false,
         branches,
         branchInfo,
         allBlocks,
@@ -241,7 +242,7 @@ REGRAS DE COMUNICACAO:
 - NUNCA use frases genericas de chatbot ou assistente virtual.
 - Seja direto, curto e natural. Tom de colega de trabalho no WhatsApp.
 - Use emojis com moderacao para deixar a conversa dinamica.
-- Ao mencionar prioridade, use o formato: "Prioridade: [nivel] [emoji]" (baixa 🟢, media 🔵, alta 🟡, urgente 🔴).
+${taskDetails[0]?.showPriority ? '- Ao mencionar prioridade, use o formato: "Prioridade: [nivel] [emoji]" (baixa 🟢, media 🔵, alta 🟡, urgente 🔴).' : '- NAO mencione a prioridade da tarefa na mensagem.'}
 - Use o primeiro nome da pessoa ocasionalmente.`;
 
     const openai = new OpenAI({ apiKey });

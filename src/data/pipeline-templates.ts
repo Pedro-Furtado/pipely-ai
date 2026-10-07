@@ -66,6 +66,7 @@ export const pipelineTemplates: PipelineTemplate[] = [
             config: {
               prompt: 'Pergunte se a tarefa ja foi finalizada',
               auto_status: 'in_progress',
+              show_priority: false,
               msg_delay_minutes: 120,
               branches: [
                 { label: 'Tarefa finalizada', nextSlug: '__tarefa_finalizada__', condition: 'Tarefa foi finalizada' },
@@ -79,7 +80,7 @@ export const pipelineTemplates: PipelineTemplate[] = [
             name: 'Tarefa Finalizada',
             slug: 'tarefa_finalizada',
             blockType: 'message',
-            config: { auto_status: 'done', notify_on_entry: true },
+            config: { auto_status: 'done', notify_on_entry: true, show_priority: false },
             position: 1,
             isLocked: false,
           },
@@ -119,6 +120,7 @@ export const pipelineTemplates: PipelineTemplate[] = [
             blockType: 'message',
             config: {
               prompt: 'O responsavel nao respondeu ao briefing. Reenvie de forma resumida e peca confirmacao',
+              show_priority: false,
               branches: [
                 { label: 'Respondeu', nextSlug: '__em_execucao__', condition: 'Responsavel confirmou que entendeu' },
               ],
@@ -140,6 +142,7 @@ export const pipelineTemplates: PipelineTemplate[] = [
             config: {
               prompt: 'Pergunte como esta o andamento e se precisa de algo',
               auto_status: 'in_progress',
+              show_priority: false,
               msg_delay_minutes: 480,
               branches: [
                 { label: 'Concluiu', nextSlug: '__em_revisao__', condition: 'Responsavel finalizou a execucao' },
@@ -162,6 +165,7 @@ export const pipelineTemplates: PipelineTemplate[] = [
             blockType: 'message',
             config: {
               prompt: 'Avise que a entrega esta em revisao e que em breve tera retorno',
+              show_priority: false,
             },
             position: 0,
             isLocked: false,
@@ -172,6 +176,7 @@ export const pipelineTemplates: PipelineTemplate[] = [
             blockType: 'message',
             config: {
               prompt: 'Informe os pontos de ajuste e peca para corrigir',
+              show_priority: false,
               branches: [
                 { label: 'Corrigido', nextSlug: '__em_revisao__', condition: 'Responsavel finalizou as correcoes' },
               ],
@@ -194,6 +199,7 @@ export const pipelineTemplates: PipelineTemplate[] = [
               prompt: 'Parabens! Avise que o projeto foi aprovado e agradeca pelo trabalho',
               auto_status: 'done',
               notify_on_entry: true,
+              show_priority: false,
             },
             position: 0,
             isLocked: false,
@@ -235,6 +241,7 @@ export const pipelineTemplates: PipelineTemplate[] = [
             blockType: 'message',
             config: {
               prompt: 'Informe que a demanda foi recusada e pergunte o motivo',
+              show_priority: false,
             },
             position: 1,
             isLocked: false,
@@ -253,6 +260,7 @@ export const pipelineTemplates: PipelineTemplate[] = [
             config: {
               prompt: 'Pergunte como esta o progresso da demanda',
               auto_status: 'in_progress',
+              show_priority: false,
               msg_delay_minutes: 240,
               branches: [
                 { label: 'Finalizada', nextSlug: '__concluida__', condition: 'Demanda foi concluida' },
@@ -277,6 +285,7 @@ export const pipelineTemplates: PipelineTemplate[] = [
               prompt: 'Avise que a demanda foi marcada como concluida e agradeca',
               auto_status: 'done',
               notify_on_entry: true,
+              show_priority: false,
             },
             position: 0,
             isLocked: false,
@@ -325,6 +334,7 @@ export const pipelineTemplates: PipelineTemplate[] = [
             config: {
               prompt: 'Pergunte se ja terminou de produzir o conteudo',
               auto_status: 'in_progress',
+              show_priority: false,
               msg_delay_minutes: 1440,
               branches: [
                 { label: 'Entregue', nextSlug: '__em_revisao__', condition: 'Responsavel entregou o conteudo' },
@@ -347,6 +357,7 @@ export const pipelineTemplates: PipelineTemplate[] = [
             blockType: 'message',
             config: {
               prompt: 'Avise que o conteudo esta em revisao',
+              show_priority: false,
             },
             position: 0,
             isLocked: false,
@@ -357,6 +368,7 @@ export const pipelineTemplates: PipelineTemplate[] = [
             blockType: 'message',
             config: {
               prompt: 'Informe os ajustes necessarios e peca para corrigir',
+              show_priority: false,
               branches: [
                 { label: 'Corrigido', nextSlug: '__em_revisao__', condition: 'Responsavel corrigiu' },
               ],
@@ -379,6 +391,7 @@ export const pipelineTemplates: PipelineTemplate[] = [
               prompt: 'Avise que o conteudo foi aprovado e agradeca pelo trabalho',
               auto_status: 'done',
               notify_on_entry: true,
+              show_priority: false,
             },
             position: 0,
             isLocked: false,
