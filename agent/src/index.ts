@@ -122,7 +122,6 @@ async function isTeamMember(remoteJid: string): Promise<boolean> {
     if (lidDigits.length >= 8) {
       const count = await prisma.teamMember.count({
         where: {
-          status: "accepted",
           remoteJid: { endsWith: `${lidDigits.slice(-8)}@s.whatsapp.net` },
         },
       });
@@ -143,7 +142,7 @@ async function isTeamMember(remoteJid: string): Promise<boolean> {
   }
 
   const count = await prisma.teamMember.count({
-    where: { remoteJid: { in: jidVariants }, status: "accepted" },
+    where: { remoteJid: { in: jidVariants } },
   });
   return count > 0;
 }
