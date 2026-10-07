@@ -100,6 +100,9 @@ export default function BlockConfigModal({ block, pipeline, open, onClose, onSav
   const [notifyOnEntry, setNotifyOnEntry] = useState(false)
   const [showPriority, setShowPriority] = useState(true)
   const [autoStatus, setAutoStatus] = useState('')
+  const [autoRemoveEnabled, setAutoRemoveEnabled] = useState(false)
+  const [autoRemoveDays, setAutoRemoveDays] = useState('0')
+  const [autoRemoveTime, setAutoRemoveTime] = useState('01:00')
   const [branches, setBranches] = useState<Branch[]>([])
   const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([])
   const [scheduleMode, setScheduleMode] = useState<'weekly' | 'specific'>('weekly')
@@ -141,6 +144,10 @@ export default function BlockConfigModal({ block, pipeline, open, onClose, onSav
     setNotifyOnEntry(!!(c.notify_on_entry))
     setShowPriority(c.show_priority !== false)
     setAutoStatus((c.auto_status as string) || '')
+    const autoRemove = minutesToDaysTime(Number(c.auto_remove_minutes) || 0)
+    setAutoRemoveEnabled(!!(c.auto_remove_minutes))
+    setAutoRemoveDays(autoRemove.days)
+    setAutoRemoveTime(autoRemove.time)
     setBranches((c.branches as Branch[]) || [])
     const sched = c.schedule as { entries?: ScheduleEntry[] } | undefined
     if (sched?.entries?.length) {
@@ -187,6 +194,10 @@ export default function BlockConfigModal({ block, pipeline, open, onClose, onSav
         if (autoStatus) config.auto_status = autoStatus
         if (notifyOnEntry) config.notify_on_entry = true
         if (!showPriority) config.show_priority = false
+        if (autoRemoveEnabled) {
+          const autoRemoveMin = daysTimeToMinutes(autoRemoveDays, autoRemoveTime)
+          if (autoRemoveMin > 0) config.auto_remove_minutes = autoRemoveMin
+        }
         const validSchedule = scheduleEntries.filter((e) => e.time && (e.day || e.date))
         if (validSchedule.length > 0) {
           config.schedule = { entries: validSchedule }
@@ -397,6 +408,46 @@ export default function BlockConfigModal({ block, pipeline, open, onClose, onSav
                     </SelectItem>
                   </SelectContent>
                 </Select>
+              </Section>
+
+              {/* ── Remover do pipeline ── */}
+              <Section icon={Trash2} title="Remover do pipeline">
+                <div className="flex items-start gap-2">
+                  <Checkbox
+                    id="auto-remove"
+                    checked={autoRemoveEnabled}
+                    onCheckedChange={(checked) => setAutoRemoveEnabled(checked === true)}
+                  />
+                  <div>
+                    <label htmlFor="auto-remove" className="text-xs text-zinc-300 cursor-pointer">
+                      Remover tarefa do pipeline apos um tempo
+                    </label>
+                    <p className="text-[10px] text-zinc-500 mt-0.5">A tarefa sai do pipeline automaticamente para nao poluir o fluxo. Ela continua existindo na lista de tarefas.</p>
+                  </div>
+                </div>
+                {autoRemoveEnabled && (
+                  <div className="grid grid-cols-2 gap-2 mt-3">
+                    <div className="space-y-1">
+                      <Label className="text-[10px]">Dias</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={autoRemoveDays}
+                        onChange={(e) => setAutoRemoveDays(e.target.value)}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px]">Horas:Minutos</Label>
+                      <Input
+                        type="time"
+                        value={autoRemoveTime}
+                        onChange={(e) => setAutoRemoveTime(e.target.value)}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+                )}
               </Section>
 
               {/* ── Auto-avanço ── */}

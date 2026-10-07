@@ -128,6 +128,32 @@ export async function processBlock(
   const config = block.config;
   const prompt = (config.prompt as string) || (config.message as string) || "";
 
+  // Auto-remove: remove tasks from pipeline after configured time
+  const autoRemoveMinutes = (config.auto_remove_minutes as number) || 0;
+  if (autoRemoveMinutes > 0) {
+    const removedIds: string[] = [];
+    for (const task of tasks) {
+      if (task.minutesInBlock >= autoRemoveMinutes) {
+        await prisma.taskLog.updateMany({
+          where: { taskId: task.id, leftAt: null },
+          data: { leftAt: new Date() },
+        });
+        await prisma.task.update({
+          where: { id: task.id },
+          data: { blockId: null },
+        });
+        removedIds.push(task.id);
+        log.info("PROCESSOR", `Auto-removed task "${task.title}" after ${task.minutesInBlock}min`);
+        await saveAgentLog(ownerCtx.ownerId, "auto_remove", `Removida do pipeline — "${task.title}"`, `Removida apos ${task.minutesInBlock}min no bloco "${block.name}"`, task.id);
+      }
+    }
+    if (removedIds.length > 0) {
+      // Filter out removed tasks so they aren't processed further
+      blockCtx = { ...blockCtx, tasks: tasks.filter((t) => !removedIds.includes(t.id)) };
+      if (blockCtx.tasks.length === 0) return;
+    }
+  }
+
   // Auto-status: change task status on block entry
   const autoStatus = config.auto_status as string | undefined;
   if (autoStatus) {
