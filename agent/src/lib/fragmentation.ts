@@ -60,7 +60,7 @@ export async function sendWithFragmentation(
         await fetch(`${serverUrl}/message/presence`, {
           method: "POST",
           headers: { "Content-Type": "application/json", apikey: instanceToken },
-          body: JSON.stringify({ number: remoteJid, presence: "composing" }),
+          body: JSON.stringify({ number: remoteJid, state: "composing", delay: 1200 }),
         });
       } catch {
         // non-fatal

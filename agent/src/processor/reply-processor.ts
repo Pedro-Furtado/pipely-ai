@@ -27,22 +27,43 @@ export async function processReply(event: ReplyEvent): Promise<void> {
   log.info("REPLY", `Message from ${remoteJid.substring(0, 6)}...: "${message.substring(0, 80)}"`);
 
   // Find team member by remoteJid — try exact match, then with/without 9 after country+DDD
-  const digits = remoteJid.replace("@s.whatsapp.net", "");
-  const jidVariants = [remoteJid];
+  let member: Awaited<ReturnType<typeof prisma.teamMember.findFirst>> = null;
 
-  // BR numbers: Evolution may strip or add the 9 after DDD (55XX9... vs 55XX...)
-  if (digits.startsWith("55") && digits.length === 12) {
-    jidVariants.push(`${digits.slice(0, 4)}9${digits.slice(4)}@s.whatsapp.net`);
-  } else if (digits.startsWith("55") && digits.length === 13) {
-    jidVariants.push(`${digits.slice(0, 4)}${digits.slice(5)}@s.whatsapp.net`);
+  if (remoteJid.includes("@lid")) {
+    // @lid JIDs (WhatsApp Business linked devices) — match by phone digits suffix
+    const lidDigits = remoteJid.replace("@lid", "").replace(/[^0-9]/g, "");
+    if (lidDigits.length >= 8) {
+      member = await prisma.teamMember.findFirst({
+        where: { remoteJid: { endsWith: `${lidDigits.slice(-8)}@s.whatsapp.net` } },
+      });
+    }
+    if (!member) {
+      // Broader search: try all members and match by last 8 digits
+      const allMembers = await prisma.teamMember.findMany({ where: { remoteJid: { not: null } } });
+      member = allMembers.find((m) => {
+        if (!m.remoteJid) return false;
+        const mDigits = m.remoteJid.replace("@s.whatsapp.net", "").replace(/[^0-9]/g, "");
+        return mDigits.length >= 8 && lidDigits.length >= 8 && mDigits.slice(-8) === lidDigits.slice(-8);
+      }) || null;
+    }
+  } else {
+    const digits = remoteJid.replace("@s.whatsapp.net", "");
+    const jidVariants = [remoteJid];
+
+    // BR numbers: Evolution may strip or add the 9 after DDD (55XX9... vs 55XX...)
+    if (digits.startsWith("55") && digits.length === 12) {
+      jidVariants.push(`${digits.slice(0, 4)}9${digits.slice(4)}@s.whatsapp.net`);
+    } else if (digits.startsWith("55") && digits.length === 13) {
+      jidVariants.push(`${digits.slice(0, 4)}${digits.slice(5)}@s.whatsapp.net`);
+    }
+
+    member = await prisma.teamMember.findFirst({
+      where: { remoteJid: { in: jidVariants } },
+    });
   }
 
-  const member = await prisma.teamMember.findFirst({
-    where: { remoteJid: { in: jidVariants } },
-  });
-
   if (!member) {
-    log.warn("REPLY", `No team member found for jid ${remoteJid} (tried ${jidVariants.length} variants)`);
+    log.warn("REPLY", `No team member found for jid ${remoteJid}`);
     return;
   }
 

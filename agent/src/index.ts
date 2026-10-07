@@ -53,14 +53,27 @@ async function handleWebhook(body: Record<string, unknown>): Promise<void> {
     if (info.IsFromMe) return;
     if (info.IsGroup) return;
 
-    const remoteJid = info.Chat as string;
-    if (!remoteJid || !remoteJid.includes("@s.whatsapp.net")) return;
+    // WhatsApp Business may send @lid JIDs — use SenderAlt (has @s.whatsapp.net) as fallback
+    let remoteJid = (info.Chat as string) || "";
+    if (!remoteJid || remoteJid.includes("@lid")) {
+      const senderAlt = (info.SenderAlt as string) || "";
+      if (senderAlt.includes("@s.whatsapp.net")) {
+        remoteJid = senderAlt;
+      }
+    }
+    if (!remoteJid || (!remoteJid.includes("@s.whatsapp.net") && !remoteJid.includes("@lid"))) return;
 
     const text =
       (msgData?.conversation as string) ||
       (msgData?.Conversation as string) ||
       ((msgData?.extendedTextMessage as Record<string, unknown>)?.text as string) ||
       ((msgData?.ExtendedTextMessage as Record<string, unknown>)?.Text as string) ||
+      // WhatsApp Business button responses
+      ((msgData?.buttonsResponseMessage as Record<string, unknown>)?.selectedDisplayText as string) ||
+      ((msgData?.ButtonsResponseMessage as Record<string, unknown>)?.SelectedDisplayText as string) ||
+      // WhatsApp Business list responses
+      ((msgData?.listResponseMessage as Record<string, unknown>)?.title as string) ||
+      ((msgData?.ListResponseMessage as Record<string, unknown>)?.Title as string) ||
       "";
 
     if (!text.trim()) return;
@@ -76,12 +89,23 @@ async function handleWebhook(body: Record<string, unknown>): Promise<void> {
   if (!key || !msg) return;
   if (key.fromMe) return;
 
-  const remoteJid = key.remoteJid as string;
+  let remoteJid = (key.remoteJid as string) || "";
   if (!remoteJid || remoteJid.includes("@g.us") || remoteJid.includes("@newsletter")) return;
+
+  // WhatsApp Business may send @lid JIDs — try participant or senderAlt fallback
+  if (remoteJid.includes("@lid")) {
+    const participant = (key.participant as string) || (data.participant as string) || "";
+    if (participant.includes("@s.whatsapp.net")) {
+      remoteJid = participant;
+    }
+  }
 
   const text =
     (msg.conversation as string) ||
     ((msg.extendedTextMessage as Record<string, unknown>)?.text as string) ||
+    // WhatsApp Business button/list responses
+    ((msg.buttonsResponseMessage as Record<string, unknown>)?.selectedDisplayText as string) ||
+    ((msg.listResponseMessage as Record<string, unknown>)?.title as string) ||
     "";
 
   if (!text.trim()) return;
@@ -91,6 +115,23 @@ async function handleWebhook(body: Record<string, unknown>): Promise<void> {
 }
 
 async function isTeamMember(remoteJid: string): Promise<boolean> {
+  // @lid JIDs can't be matched directly — strip suffix and search by phone digits
+  if (remoteJid.includes("@lid")) {
+    // Try to find member by partial phone match (last 8+ digits)
+    const lidDigits = remoteJid.replace("@lid", "").replace(/[^0-9]/g, "");
+    if (lidDigits.length >= 8) {
+      const count = await prisma.teamMember.count({
+        where: {
+          status: "accepted",
+          remoteJid: { endsWith: `${lidDigits.slice(-8)}@s.whatsapp.net` },
+        },
+      });
+      if (count > 0) return true;
+    }
+    // Fallback: allow @lid messages through — resolveAndProcess will match via instance
+    return true;
+  }
+
   const digits = remoteJid.replace("@s.whatsapp.net", "");
   const jidVariants = [remoteJid];
 
@@ -135,8 +176,8 @@ async function resolveAndProcess(remoteJid: string, text: string, instanceName: 
 
       if (match) {
         // Check if message is from the instance's own number (owner sending from phone)
-        const ownerJid = String(match.ownerJid || match.owner || "");
-        if (ownerJid && remoteJid === ownerJid) {
+        const ownerJid = String(match.ownerJid || match.owner || match.jid || "");
+        if (ownerJid && (remoteJid === ownerJid || ownerJid.replace(/:.*@/, "@") === remoteJid.replace(/:.*@/, "@"))) {
           log.info(TAG, `Ignoring message from instance owner (${remoteJid.substring(0, 8)}...)`);
           return;
         }
@@ -180,7 +221,7 @@ const server = http.createServer((req, res) => {
         const d = parsed.data || {};
         const inf = d.Info || {};
         const msgD = d.Message || {};
-        log.info(TAG, `Webhook: event=${parsed.event} instance=${parsed.instance || parsed.instanceName || d.instanceName} chat=${inf.Chat} fromMe=${inf.IsFromMe}`);
+        log.info(TAG, `Webhook: event=${parsed.event} instance=${parsed.instance || parsed.instanceName || d.instanceName} chat=${inf.Chat} senderAlt=${inf.SenderAlt} fromMe=${inf.IsFromMe}`);
         log.info(TAG, `Message keys: ${JSON.stringify(Object.keys(msgD))} | Message: ${JSON.stringify(msgD).substring(0, 400)}`);
         handleWebhook(parsed).catch((err) => log.error(TAG, "Webhook error", err));
       } catch (err) {
